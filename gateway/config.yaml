@@ -1,0 +1,10 @@
+db:
+    type: "sqlite"
+    host: ""
+    port: ""
+    user: ""
+    password: ""
+    db: "db"
+    migrate: true
+port: "1234"
+heartbeat: 0
