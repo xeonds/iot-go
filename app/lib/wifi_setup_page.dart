@@ -16,7 +16,7 @@ class _WiFiSetupPageState extends State<WiFiSetupPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('WiFi Setup'),
+        title: const Text('WiFi Setup'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -26,7 +26,7 @@ class _WiFiSetupPageState extends State<WiFiSetupPage> {
             children: [
               TextFormField(
                 controller: _ssidController,
-                decoration: InputDecoration(labelText: 'SSID'),
+                decoration: const InputDecoration(labelText: 'SSID'),
                 validator: (value) {
                   if (value!.isEmpty) {
                     return 'Please enter SSID';
@@ -36,7 +36,7 @@ class _WiFiSetupPageState extends State<WiFiSetupPage> {
               ),
               TextFormField(
                 controller: _passwordController,
-                decoration: InputDecoration(labelText: 'Password'),
+                decoration: const InputDecoration(labelText: 'Password'),
                 obscureText: true,
                 validator: (value) {
                   if (value!.isEmpty) {
@@ -45,10 +45,10 @@ class _WiFiSetupPageState extends State<WiFiSetupPage> {
                   return null;
                 },
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               ElevatedButton(
                 onPressed: _configureWiFi,
-                child: Text('Configure WiFi'),
+                child: const Text('Configure WiFi'),
               ),
             ],
           ),
@@ -75,7 +75,7 @@ class _WiFiSetupPageState extends State<WiFiSetupPage> {
 
         if (response.statusCode == 200) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('WiFi configured successfully')),
+            const SnackBar(content: Text('WiFi configured successfully')),
           );
         } else {
           throw Exception('Failed to configure WiFi');

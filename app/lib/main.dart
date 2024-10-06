@@ -1,4 +1,5 @@
 import 'package:app/about.dart';
+import 'package:app/device_list_page.dart';
 import 'package:app/wifi_setup_page.dart';
 import 'package:flutter/material.dart';
 
@@ -32,6 +33,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   final List<Widget> _pages = [
+    const DeviceListPage(),
     WiFiSetupPage(),
     const AboutPage(),
   ];
@@ -52,6 +54,10 @@ class _HomePageState extends State<HomePage> {
         destinations: const [
           NavigationDestination(
               icon: Icon(Icons.home),
+              selectedIcon: Icon(Icons.home),
+              label: 'Home'),
+          NavigationDestination(
+              icon: Icon(Icons.wifi),
               selectedIcon: Icon(Icons.wifi),
               label: 'WiFi Setup'),
           NavigationDestination(

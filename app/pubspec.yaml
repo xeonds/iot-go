@@ -12,6 +12,7 @@ dependencies:
     sdk: flutter
   wifi_iot: ^0.3.18
   http: ^0.13.3
+  multicast_dns: ^0.3.2+7
   cupertino_icons: ^1.0.8
 
 dev_dependencies:

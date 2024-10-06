@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/grandcat/zeroconf"
 	"github.com/xeonds/libgc"
 	"gorm.io/gorm"
 )
@@ -24,6 +25,8 @@ func main() {
 	router.POST("/register/:id", handler.RegisterDevice(db))
 	router.POST("/control/:id/:action", handler.ControlDevice(db))
 	router.POST("/status/:id", handler.GetDeviceStatus(db))
+	router.POST("/rename/:id/:name", handler.RenameDevice(db))
+	router.POST("/unregister/:id", handler.UnregisterDevice(db))
 	router.GET("/devices", handler.GetDevices(db))
 
 	go func() {
@@ -37,5 +40,23 @@ func main() {
 	}()
 	go misc.ScanDevices(5, db)
 	go misc.UpdateDeviceStatus(5, db)
+	go mDnsBroadcast()
 	go log.Fatal(router.Run(fmt.Sprintf(":%d", config.Port)))
+}
+
+func mDnsBroadcast() {
+	serviceName := "_iot-gateway._tcp"
+	serviceDomain := "local."
+	servicePort := 1234 // 这个是你服务器 API 所使用的端口
+	instanceName := "iot-gateway-instance"
+
+	// 发布 mDNS 服务
+	server, err := zeroconf.Register(instanceName, serviceName, serviceDomain, servicePort, []string{"gateway"}, nil)
+	if err != nil {
+		log.Fatalf("Failed to register mDNS service: %v", err)
+	}
+	defer server.Shutdown()
+	log.Printf("mDNS service %s.%s:%d published", instanceName, serviceName, servicePort)
+	// 模拟一直运行服务
+	select {}
 }

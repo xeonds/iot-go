@@ -36,6 +36,23 @@ func GetDeviceStatus(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func RenameDevice(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		name := c.Param("name")
+		db.Model(&model.Client{}).Where("id = ?", id).Update("name", name)
+		c.JSON(200, gin.H{"status": "ok"})
+	}
+}
+
+func UnregisterDevice(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id := c.Param("id")
+		db.Delete(&model.Client{}, "id = ?", id)
+		c.JSON(200, gin.H{"status": "ok"})
+	}
+}
+
 func ControlDevice(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")

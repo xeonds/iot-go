@@ -1,11 +1,10 @@
 package model
 
 type Client struct {
-	ID        string `gorm:"primarykey" json:"id"`
-	Name      string `json:"name"`
-	Addr      string `json:"addr"`
-	Heartbeat int    `json:"heartbeat"`
-	Status    string `json:"status"`
+	ID     string `gorm:"primarykey" json:"id"`
+	Name   string `json:"name"`
+	Addr   string `json:"addr"`
+	Status string `json:"status"`
 }
 
 type Rule struct {
