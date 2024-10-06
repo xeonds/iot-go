@@ -81,6 +81,7 @@ void setup() {
     }
   }
   server.on("/", handleRoot);
+  server.begin();
   setupAP();
 }
 
