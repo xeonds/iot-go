@@ -4,6 +4,6 @@ import "github.com/xeonds/libgc"
 
 type Config struct {
 	DB        libgc.DatabaseConfig
-	Port      string `json:"port"`
-	Heartbeat int    `json:"heartbeat"`
+	Port      int `json:"port"`
+	Heartbeat int `json:"heartbeat"`
 }
