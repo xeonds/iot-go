@@ -23,12 +23,7 @@ func ActionExec(deviceID, action string, db *gorm.DB) error {
 	url := fmt.Sprintf("http://%s/control", client.Addr)
 	payload := "status=" + action
 
-	req, err := http.NewRequest("POST", url, strings.NewReader(payload))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	if err != nil {
-		return fmt.Errorf("failed to create HTTP request: %w", err)
-	}
-	resp, err := new(http.Client).Do(req)
+	resp, err := http.Post(url, "application/x-www-form-urlencoded", strings.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("failed to execute HTTP request: %w", err)
 	}
@@ -45,35 +40,34 @@ func ScanDevices(duration int, db *gorm.DB) {
 		log.Fatalf("Failed to initialize mDNS resolver: %v", err)
 	}
 
+	entries := make(chan *zeroconf.ServiceEntry)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+	defer cancel()
+	err = resolver.Browse(ctx, "_iot-device._tcp", "local.", entries)
+	if err != nil {
+		log.Printf("Failed to browse mDNS: %v", err)
+	}
+	<-ctx.Done()
+
 	for range time.Tick(time.Duration(duration) * time.Second) {
-		entries := make(chan *zeroconf.ServiceEntry)
-		go func(results <-chan *zeroconf.ServiceEntry) {
-			for entry := range results {
-				// if item id (entry.Instance as id in database) not exists, add it to database
-				var count int64
-				db.Find(&model.Client{ID: entry.Instance}).Count(&count)
-				if count == 0 {
-					db.Create(&model.Client{ID: entry.Instance, Addr: entry.AddrIPv4[0].String()})
-					log.Printf("Device %s added to database\n", entry.Instance)
-				} else {
-					// if item's ip address changed, update it
-					client := new(model.Client)
-					db.First(&client, "id = ?", entry.Instance)
-					if client.Addr != entry.AddrIPv4[0].String() {
-						db.Model(&client).Update("addr", entry.AddrIPv4[0].String())
-						log.Printf("Device %s 's ip updated from %s to %s\n", entry.Instance, client.Addr, entry.AddrIPv4[0].String())
-					}
+		for entry := range entries {
+			// if item id (entry.Instance as id in database) not exists, add it to database
+			var count int64
+			db.Find(&model.Client{ID: entry.Instance}).Count(&count)
+			if count == 0 {
+				db.Create(&model.Client{ID: entry.Instance, Addr: entry.AddrIPv4[0].String()})
+				log.Printf("Device %s added to database\n", entry.Instance)
+			} else {
+				// if item's ip address changed, update it
+				client := new(model.Client)
+				db.First(&client, "id = ?", entry.Instance)
+				if client.Addr != entry.AddrIPv4[0].String() {
+					db.Model(&client).Update("addr", entry.AddrIPv4[0].String())
+					log.Printf("Device %s 's ip updated from %s to %s\n", entry.Instance, client.Addr, entry.AddrIPv4[0].String())
 				}
 			}
-		}(entries)
-
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-		defer cancel()
-		err := resolver.Browse(ctx, "_iot-device._tcp", "local.", entries)
-		if err != nil {
-			log.Printf("Failed to browse mDNS: %v", err)
 		}
-		<-ctx.Done()
 	}
 }
 
@@ -89,6 +83,8 @@ func UpdateDeviceStatus(duration int, db *gorm.DB) {
 			resp, err := http.Get(url)
 			if err != nil {
 				log.Printf("Failed to get status for device %s: %v", client.ID, err)
+				db.Model(&client).Update("status", "-1")
+				log.Printf("Device %s status updated to -1 (offline)\n", client.ID)
 				continue
 			}
 			defer resp.Body.Close()
@@ -96,6 +92,8 @@ func UpdateDeviceStatus(duration int, db *gorm.DB) {
 			body, err := io.ReadAll(resp.Body)
 			if err != nil {
 				log.Printf("Failed to read status for device %s: %v", client.ID, err)
+				db.Model(&client).Update("status", "-1")
+				log.Printf("Device %s status updated to -1 (offline)\n", client.ID)
 				continue
 			}
 			status := string(body)

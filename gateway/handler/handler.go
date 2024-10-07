@@ -3,6 +3,7 @@ package handler
 import (
 	"gateway/misc"
 	"gateway/model"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -48,6 +49,18 @@ func RenameDevice(db *gorm.DB) gin.HandlerFunc {
 func UnregisterDevice(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id := c.Param("id")
+		client := new(model.Client)
+		if err := db.First(client, "id = ?", id).Error; err != nil {
+			c.JSON(404, gin.H{"status": "client not found"})
+			return
+		}
+
+		resp, err := http.Post("http://"+client.Addr+"/reset", "", nil)
+		if err != nil || resp.StatusCode != 200 {
+			c.JSON(500, gin.H{"status": "failed to reset device"})
+			return
+		}
+
 		db.Delete(&model.Client{}, "id = ?", id)
 		c.JSON(200, gin.H{"status": "ok"})
 	}

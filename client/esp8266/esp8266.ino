@@ -69,6 +69,18 @@ void setup() {
       server.on("/info", HTTP_GET, []() {
         server.send(200, "application/json", "{\"category\":\"" + String(deviceType) + "\",\"id\":\"" + String(deviceId) + "\"}");
       });
+      server.on("/reboot", HTTP_POST, []() {
+        server.send(200, "text/plain", "Rebooting...");
+        delay(1000);
+        ESP.restart();
+      });
+      server.on("/reset", HTTP_POST, []() {
+        for (int i = 0; i < sizeof(WiFiCredentials); i++) { EEPROM.write(i, 0); }
+        EEPROM.commit();
+        server.send(200, "text/plain", "EEPROM reset. Rebooting...");
+        delay(1000);
+        ESP.restart();
+      });
       server.begin();
 
       if (!MDNS.begin(String(deviceType) + "-" + String(deviceId)))
