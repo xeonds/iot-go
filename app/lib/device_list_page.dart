@@ -374,7 +374,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                         crossAxisCount: 2,
-                        childAspectRatio: 5 / 2,
+                        childAspectRatio: 4 / 2,
                       ),
                       itemCount: devices.length,
                       itemBuilder: (context, index) {
@@ -430,40 +430,30 @@ class _DeviceListPageState extends State<DeviceListPage> {
                                           ),
                                         ),
                                         const SizedBox(height: 16),
-                                        Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              ElevatedButton(
-                                                onPressed: () {
-                                                  String action =
-                                                      device.status == "1"
-                                                          ? '0'
-                                                          : '1';
-                                                  controlDevice(
-                                                      device.id, action);
-                                                  Navigator.of(context).pop();
-                                                },
-                                                child: Text(device.status == "1"
-                                                    ? 'Turn Off'
-                                                    : 'Turn On'),
-                                              ),
-                                              const SizedBox(height: 16),
-                                              ElevatedButton(
-                                                  onPressed: () =>
-                                                      showRenameDialog(
-                                                          context, device),
-                                                  child: const Text(
-                                                      'Rename Device')),
-                                              const SizedBox(height: 16),
-                                              ElevatedButton(
-                                                onPressed: () =>
-                                                    showUnregisterDialog(
-                                                        context, device),
-                                                child: const Text(
-                                                    'Unregister Device'),
-                                              ),
-                                            ])
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            String action = device.status == "1"
+                                                ? '0'
+                                                : '1';
+                                            controlDevice(device.id, action);
+                                            Navigator.of(context).pop();
+                                          },
+                                          child: Text(device.status == "1"
+                                              ? 'Turn Off'
+                                              : 'Turn On'),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        ElevatedButton(
+                                            onPressed: () => showRenameDialog(
+                                                context, device),
+                                            child: const Text('Rename Device')),
+                                        const SizedBox(height: 16),
+                                        ElevatedButton(
+                                          onPressed: () => showUnregisterDialog(
+                                              context, device),
+                                          child:
+                                              const Text('Unregister Device'),
+                                        ),
                                       ],
                                     ),
                                   );
@@ -503,7 +493,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 12),
+                                      const SizedBox(height: 4),
                                       Row(
                                         mainAxisAlignment:
                                             MainAxisAlignment.start,
