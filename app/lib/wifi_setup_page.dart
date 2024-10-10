@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:wifi_iot/wifi_iot.dart';
 
 class WiFiSetupPage extends StatefulWidget {
@@ -8,83 +7,64 @@ class WiFiSetupPage extends StatefulWidget {
 }
 
 class _WiFiSetupPageState extends State<WiFiSetupPage> {
-  final _formKey = GlobalKey<FormState>();
-  final _ssidController = TextEditingController();
-  final _passwordController = TextEditingController();
+  List<WifiNetwork> _wifiNetworks = [];
+  String _selectedSSID = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadWifiNetworks();
+  }
+
+  Future<void> _loadWifiNetworks() async {
+    List<WifiNetwork> wifiNetworks = await WiFiForIoTPlugin.loadWifiList();
+    setState(() {
+      _wifiNetworks = wifiNetworks;
+    });
+  }
+
+  void _connectToWiFi(String ssid) async {
+    bool isConnected = await WiFiForIoTPlugin.connect(ssid);
+    if (isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connected to $ssid')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to connect to $ssid')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('WiFi Setup'),
+        title: const Text('WiFi Setup Page'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            children: [
-              TextFormField(
-                controller: _ssidController,
-                decoration: const InputDecoration(labelText: 'SSID'),
-                validator: (value) {
-                  if (value!.isEmpty) {
-                    return 'Please enter SSID';
-                  }
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'Password'),
-                obscureText: true,
-                validator: (value) {
-                  if (value!.isEmpty) {
-                    return 'Please enter password';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _configureWiFi,
-                child: const Text('Configure WiFi'),
-              ),
-            ],
-          ),
-        ),
-      ),
+      body: _wifiNetworks.isEmpty
+          ? const Center(child: const CircularProgressIndicator())
+          : ListView.builder(
+              itemCount: _wifiNetworks.length,
+              itemBuilder: (context, index) {
+                final wifiNetwork = _wifiNetworks[index];
+                return ListTile(
+                  title: Text(wifiNetwork.ssid ?? 'Unknown SSID'),
+                  onTap: () {
+                    setState(() {
+                      _selectedSSID = wifiNetwork.ssid ?? '';
+                    });
+                    _connectToWiFi(_selectedSSID);
+                  },
+                );
+              },
+            ),
     );
   }
+}
 
-  Future<void> _configureWiFi() async {
-    if (_formKey.currentState!.validate()) {
-      try {
-        // 连接到 ESP8266 的 AP
-        await WiFiForIoTPlugin.connect('ESP8266_Setup',
-            password: 'password', security: NetworkSecurity.WPA);
-
-        // 发送 WiFi 配置到 ESP8266
-        final response = await http.post(
-          Uri.parse('http://192.168.4.1/configure'),
-          body: {
-            'ssid': _ssidController.text,
-            'password': _passwordController.text,
-          },
-        );
-
-        if (response.statusCode == 200) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('WiFi configured successfully')),
-          );
-        } else {
-          throw Exception('Failed to configure WiFi');
-        }
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
-        );
-      }
-    }
-  }
+void main() {
+  runApp(MaterialApp(
+    home: WiFiSetupPage(),
+  ));
 }

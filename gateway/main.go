@@ -40,23 +40,22 @@ func main() {
 	}()
 	go misc.ScanDevices(5, db)
 	go misc.UpdateDeviceStatus(5, db)
-	go mDnsBroadcast()
+	go mDnsBroadcast(config)
 	go log.Fatal(router.Run(fmt.Sprintf(":%d", config.Port)))
+	select {}
 }
 
-func mDnsBroadcast() {
+func mDnsBroadcast(config *config.Config) {
 	serviceName := "_iot-gateway._tcp"
 	serviceDomain := "local."
-	servicePort := 1234 // 这个是你服务器 API 所使用的端口
+	servicePort := config.Port
 	instanceName := "iot-gateway-instance"
 
-	// 发布 mDNS 服务
 	server, err := zeroconf.Register(instanceName, serviceName, serviceDomain, servicePort, []string{"gateway"}, nil)
 	if err != nil {
 		log.Fatalf("Failed to register mDNS service: %v", err)
 	}
 	defer server.Shutdown()
 	log.Printf("mDNS service %s.%s:%d published", instanceName, serviceName, servicePort)
-	// 模拟一直运行服务
 	select {}
 }

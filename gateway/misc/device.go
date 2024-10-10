@@ -25,9 +25,12 @@ func ActionExec(deviceID, action string, db *gorm.DB) error {
 
 	resp, err := http.Post(url, "application/x-www-form-urlencoded", strings.NewReader(payload))
 	if err != nil {
+		// 认为设备离线
+		db.Model(client).Update("status", "-1")
 		return fmt.Errorf("failed to execute HTTP request: %w", err)
 	}
 	defer resp.Body.Close()
+	db.Model(client).Update("status", action)
 	return nil
 }
 
@@ -39,19 +42,10 @@ func ScanDevices(duration int, db *gorm.DB) {
 	if err != nil {
 		log.Fatalf("Failed to initialize mDNS resolver: %v", err)
 	}
-
 	entries := make(chan *zeroconf.ServiceEntry)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-	defer cancel()
-	err = resolver.Browse(ctx, "_iot-device._tcp", "local.", entries)
-	if err != nil {
-		log.Printf("Failed to browse mDNS: %v", err)
-	}
-	<-ctx.Done()
-
-	for range time.Tick(time.Duration(duration) * time.Second) {
-		for entry := range entries {
+	go func(results <-chan *zeroconf.ServiceEntry) {
+		for entry := range results {
 			// if item id (entry.Instance as id in database) not exists, add it to database
 			var count int64
 			db.Find(&model.Client{ID: entry.Instance}).Count(&count)
@@ -68,6 +62,16 @@ func ScanDevices(duration int, db *gorm.DB) {
 				}
 			}
 		}
+	}(entries)
+
+	ctx := context.Background()
+
+	for {
+		err = resolver.Browse(ctx, "_iot-device._tcp", "local.", entries)
+		if err != nil {
+			log.Printf("Failed to browse mDNS: %v", err)
+		}
+		time.Sleep(time.Duration(duration) * time.Second)
 	}
 }
 
@@ -98,8 +102,10 @@ func UpdateDeviceStatus(duration int, db *gorm.DB) {
 			}
 			status := string(body)
 
-			db.Model(&client).Update("status", status)
-			log.Printf("Device %s status updated to %s\n", client.ID, status)
+			if status != client.Status {
+				db.Model(&client).Update("status", status)
+				log.Printf("Device %s status updated to %s\n", client.ID, status)
+			}
 		}
 	}
 }

@@ -1,6 +1,6 @@
-import 'package:app/about.dart';
+import 'package:app/settings.dart';
+import 'package:app/automation_page.dart';
 import 'package:app/device_list_page.dart';
-import 'package:app/wifi_setup_page.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -14,6 +14,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'IoT-Go',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.lightGreen),
         useMaterial3: true,
@@ -34,7 +35,7 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   final List<Widget> _pages = [
     const DeviceListPage(),
-    WiFiSetupPage(),
+    const AutomationPage(),
     const AboutPage(),
   ];
 
@@ -57,13 +58,13 @@ class _HomePageState extends State<HomePage> {
               selectedIcon: Icon(Icons.home),
               label: 'Home'),
           NavigationDestination(
-              icon: Icon(Icons.wifi),
-              selectedIcon: Icon(Icons.wifi),
-              label: 'WiFi Setup'),
+              icon: Icon(Icons.auto_awesome),
+              selectedIcon: Icon(Icons.auto_awesome),
+              label: 'Automation'),
           NavigationDestination(
-              icon: Icon(Icons.info),
-              selectedIcon: Icon(Icons.info),
-              label: 'About'),
+              icon: Icon(Icons.settings),
+              selectedIcon: Icon(Icons.settings),
+              label: 'Settings'),
         ],
         selectedIndex: _selectedIndex,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,

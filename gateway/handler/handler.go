@@ -68,11 +68,10 @@ func UnregisterDevice(db *gorm.DB) gin.HandlerFunc {
 
 func ControlDevice(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		id := c.Param("id")
-		action := c.Param("action")
-		var client model.Client
-		db.First(&client, "id = ?", id)
-		misc.ActionExec(client.ID, action, db)
+		if err := misc.ActionExec(c.Param("id"), c.Param("action"), db); err != nil {
+			c.JSON(500, gin.H{"status": "failed to exec action"})
+			return
+		}
 		c.JSON(200, gin.H{"status": "ok"})
 	}
 }
