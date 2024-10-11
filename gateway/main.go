@@ -23,7 +23,7 @@ func main() {
 
 	router := gin.Default()
 	router.POST("/register/:id", handler.RegisterDevice(db))
-	router.POST("/control/:id/:action", handler.ControlDevice(db))
+	router.POST("/control/:id/:action", handler.ControlDevice(db, config))
 	router.POST("/status/:id", handler.GetDeviceStatus(db))
 	router.POST("/rename/:id/:name", handler.RenameDevice(db))
 	router.POST("/unregister/:id", handler.UnregisterDevice(db))
@@ -34,7 +34,7 @@ func main() {
 			rules := new(misc.Rules)
 			db.Find(rules)
 			for _, rule := range rules.Match(time.Now().String()) {
-				misc.ActionExec(rule.DeviceID, rule.Action, db)
+				misc.ActionExec(rule.DeviceID, rule.Action, db, time.Duration(config.Heartbeat))
 			}
 		}
 	}()
