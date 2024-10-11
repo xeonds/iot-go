@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func ActionExec(deviceID, action string, db *gorm.DB) error {
+func ActionExec(deviceID, action string, db *gorm.DB, timeout time.Duration) error {
 	client := new(model.Client)
 	db.First(client, "id = ?", deviceID)
 	if client.ID == "" {
@@ -23,7 +23,11 @@ func ActionExec(deviceID, action string, db *gorm.DB) error {
 	url := fmt.Sprintf("http://%s/control", client.Addr)
 	payload := "status=" + action
 
-	resp, err := http.Post(url, "application/x-www-form-urlencoded", strings.NewReader(payload))
+	clientHTTP := &http.Client{
+		Timeout: timeout,
+	}
+
+	resp, err := clientHTTP.Post(url, "application/x-www-form-urlencoded", strings.NewReader(payload))
 	if err != nil {
 		// 认为设备离线
 		db.Model(client).Update("status", "-1")

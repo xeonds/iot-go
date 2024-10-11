@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"gateway/config"
 	"gateway/misc"
 	"gateway/model"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -66,9 +68,9 @@ func UnregisterDevice(db *gorm.DB) gin.HandlerFunc {
 	}
 }
 
-func ControlDevice(db *gorm.DB) gin.HandlerFunc {
+func ControlDevice(db *gorm.DB, config *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := misc.ActionExec(c.Param("id"), c.Param("action"), db); err != nil {
+		if err := misc.ActionExec(c.Param("id"), c.Param("action"), db, time.Duration(config.Heartbeat)); err != nil {
 			c.JSON(500, gin.H{"status": "failed to exec action"})
 			return
 		}
