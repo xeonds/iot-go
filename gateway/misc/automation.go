@@ -1,5 +1,12 @@
 package misc
 
+import (
+	"time"
+
+	"github.com/gorilla/websocket"
+	"gorm.io/gorm"
+)
+
 type Rule struct {
 	DeviceID  string
 	Condition string
@@ -28,4 +35,14 @@ func (r Rules) Match(condition string) Rules {
 		}
 	}
 	return res
+}
+
+func RunAutomation(db *gorm.DB, conns map[string]*websocket.Conn) {
+	for range time.Tick(1 * time.Minute) {
+		rules := new(Rules)
+		db.Find(rules)
+		for _, rule := range rules.Match(time.Now().String()) {
+			RunAction(rule.DeviceID, rule.Action, db, conns[rule.DeviceID])
+		}
+	}
 }
