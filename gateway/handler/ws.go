@@ -17,10 +17,7 @@ var deviceMessageChannel = make(chan model.DeviceAPIMessage, 100)
 
 func handleDeviceMessage(db *gorm.DB) {
 	for msg := range deviceMessageChannel {
-		var device model.Client
-		// 解析消息并更新设备状态
 		log.Printf("处理设备消息: %s", msg.Message)
-		db.Model(&device).Where("device_id = ?", "example_id").Update("status", "online")
 	}
 }
 
@@ -45,6 +42,7 @@ func DeviceWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.H
 		}
 		defer conn.Close()
 		conns[id] = conn
+		db.FirstOrCreate(&model.Client{ID: id, Status: "online", Addr: c.ClientIP()})
 		var device model.Client
 		for {
 			_, message, err := conn.ReadMessage()
@@ -52,13 +50,11 @@ func DeviceWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.H
 				log.Println("读取消息错误:", err)
 				break
 			}
-			log.Printf("收到设备消息: %s", message)
-
 			deviceMessageChannel <- model.DeviceAPIMessage{Conn: conn, Message: message}
 		}
 
 		// 设备断开连接时，更新数据库
-		db.Model(&device).Where("device_id = ?", device.ID).Update("status", "-1")
+		db.Model(&device).Where("id = ?", device.ID).Update("status", "-1")
 		conns[id] = nil
 	}
 }

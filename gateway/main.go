@@ -16,12 +16,12 @@ import (
 )
 
 func main() {
-	var config = libgc.LoadConfig[config.Config]()
-	var db = libgc.NewDB(&config.DB, func(db *gorm.DB) error {
+	config := libgc.LoadConfig[config.Config]()
+	db := libgc.NewDB(&config.DB, func(db *gorm.DB) error {
 		return db.AutoMigrate(&model.Client{}, &model.Rule{})
 	})
-	var gatewayConns, clientConns map[string]*websocket.Conn
-	var router = gin.Default()
+	gatewayConns, clientConns := make(map[string]*websocket.Conn), make(map[string]*websocket.Conn)
+	router := gin.Default()
 	router.GET("/ws/device/:id", handler.DeviceWebSocketHandler(db, clientConns))
 	router.GET("/ws/gateway/:id", handler.GatewayWebSocketHandler(db, gatewayConns))
 	api := router.Group("/api")
@@ -56,6 +56,7 @@ func main() {
 
 	go misc.MonitorDeviceConnections(clientConns, db, config.Heartbeat)
 	go handler.StartGatewayCmdHandler(db)
+	go handler.StartDeviceMessageHandler(db)
 	go misc.RunmDnsBroadcast(config)
 	go log.Fatal(router.Run(fmt.Sprintf(":%d", config.Port)))
 	select {}
