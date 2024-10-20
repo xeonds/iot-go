@@ -1,10 +1,15 @@
+import 'package:app/session_model.dart';
 import 'package:app/settings.dart';
 import 'package:app/automation_page.dart';
 import 'package:app/device_list_page.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(ChangeNotifierProvider(
+    create: (context) => SessionModel(),
+    child: const MyApp(),
+  ));
 }
 
 class MyApp extends StatelessWidget {

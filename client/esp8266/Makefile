@@ -1,5 +1,5 @@
-u=/dev/ttyUSB1
-i=10.0.0.139
+u=/dev/ttyUSB11
+i=10.0.0.137
 
 build: esp8266.ino
 	arduino-cli compile --fqbn esp8266:esp8266:generic esp8266.ino
@@ -18,3 +18,6 @@ pull-down:
 
 get-status:
 	curl $i/status
+
+find-usb:
+	ls /dev|grep USB

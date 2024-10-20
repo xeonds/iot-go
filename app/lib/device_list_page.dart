@@ -1,39 +1,7 @@
-import 'dart:convert';
+import 'package:app/session_model.dart';
 import 'package:app/wifi_setup_page.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'package:multicast_dns/multicast_dns.dart';
-
-void main() => runApp(const MyApp());
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'IoT Device Control',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const DeviceListPage(),
-    );
-  }
-}
-
-class Device {
-  final String id;
-  String name;
-  String status;
-
-  Device({required this.id, required this.name, required this.status});
-
-  factory Device.fromJson(Map<String, dynamic> json) {
-    return Device(
-      id: json['id'],
-      name: json['name'],
-      status: json['status'],
-    );
-  }
-}
+import 'package:provider/provider.dart';
 
 class DeviceListPage extends StatefulWidget {
   const DeviceListPage({super.key});
@@ -43,111 +11,39 @@ class DeviceListPage extends StatefulWidget {
 }
 
 class _DeviceListPageState extends State<DeviceListPage> {
-  List<Device> devices = [];
-  String? gatewayIp;
-  bool isLoading = false;
-  int? gatewayPort;
-
   @override
   void initState() {
     super.initState();
-    discoverGateway();
   }
 
-  // 使用 multicast_dns 发现服务，只使用第一个发现的网关
-  void discoverGateway() async {
-    final MDnsClient client = MDnsClient();
-    await client.start();
-
-    bool gatewayFound = false;
-
-    // 查找 "_iot-gateway._tcp" 服务
-    await for (final PtrResourceRecord ptr in client.lookup<PtrResourceRecord>(
-        ResourceRecordQuery.serverPointer('_iot-gateway._tcp'))) {
-      if (gatewayFound) break;
-      await for (final SrvResourceRecord srv
-          in client.lookup<SrvResourceRecord>(
-              ResourceRecordQuery.service(ptr.domainName))) {
-        if (gatewayFound) break;
-        await for (final IPAddressResourceRecord ip
-            in client.lookup<IPAddressResourceRecord>(
-                ResourceRecordQuery.addressIPv4(srv.target))) {
-          if (!gatewayFound) {
-            setState(() {
-              gatewayIp = ip.address.address;
-              gatewayPort = srv.port;
-              print("Gateway IP found: $gatewayIp");
-            });
-            fetchDevices(); // 找到网关后立即获取设备
-            gatewayFound = true;
-          }
-        }
-      }
-    }
-
-    client.stop();
-  }
-
-  // 获取设备列表
-  Future<void> fetchDevices() async {
-    if (gatewayIp == null) return;
-    setState(() {
-      isLoading = true;
-    });
-    try {
-      final response =
-          await http.get(Uri.parse('http://$gatewayIp:$gatewayPort/devices'));
-      if (response.statusCode == 200) {
-        List<dynamic> deviceJson = json.decode(response.body);
-        setState(() {
-          devices = deviceJson.map((json) => Device.fromJson(json)).toList();
-        });
-      } else {
-        throw Exception('Failed to load devices');
-      }
-    } catch (e) {
-      print('Error fetching devices: $e');
-    } finally {
-      setState(() {
-        isLoading = false;
-      });
-    }
-  }
-
-  // 控制设备状态
-  Future<void> controlDevice(String id, String action) async {
-    if (gatewayIp == null) return;
-    try {
-      final response = await http.post(
-          Uri.parse('http://$gatewayIp:$gatewayPort/control/$id/$action'));
-      if (response.statusCode == 200) {
-        print('Device $id action $action successful');
-        setState(() {
-          devices.firstWhere((device) => device.id == id).status = action;
-        });
-      }
-    } catch (e) {
-      print('Error controlling device: $e');
-    }
-  }
-
-  // 注销设备
-  Future<void> unregisterDevice(String id) async {
-    if (gatewayIp == null) return;
-    try {
-      final response = await http
-          .post(Uri.parse('http://$gatewayIp:$gatewayPort/unregister/$id'));
-      if (response.statusCode == 200) {
-        print('Device $id unregistered successfully');
-        setState(() {
-          devices.removeWhere((device) => device.id == id);
-        });
-      } else {
-        throw Exception('Failed to unregister device');
-      }
-    } catch (e) {
-      print('Error unregistering device: $e');
-    }
+  void showUnregisterDialog(BuildContext context, Device device) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        final session = Provider.of<SessionModel>(context, listen: false);
+        return AlertDialog(
+          title: const Text('Confirm'),
+          content:
+              const Text('Are you sure you want to unregister this device?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                session.unregisterDevice(device.id);
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+              child: const Text('Unregister'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // 重命名设备
@@ -157,6 +53,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
     showDialog(
       context: context,
       builder: (BuildContext context) {
+        final session = Provider.of<SessionModel>(context, listen: false);
         return AlertDialog(
           title: const Text('Rename Device'),
           content: TextField(
@@ -174,7 +71,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
             ),
             TextButton(
               onPressed: () {
-                renameDevice(device.id, nameController.text);
+                session.renameDevice(device.id, nameController.text);
                 Navigator.of(context).pop();
               },
               child: const Text('Rename'),
@@ -185,55 +82,9 @@ class _DeviceListPageState extends State<DeviceListPage> {
     );
   }
 
-  void renameDevice(String id, String name) async {
-    if (gatewayIp == null) return;
-    try {
-      final response = await http
-          .post(Uri.parse('http://$gatewayIp:$gatewayPort/rename/$id/$name'));
-      if (response.statusCode == 200) {
-        print('Device $id renamed to $name');
-        setState(() {
-          devices.firstWhere((device) => device.id == id).name = name;
-        });
-      } else {
-        throw Exception('Failed to rename device');
-      }
-    } catch (e) {
-      print('Error renaming device: $e');
-    }
-  }
-
-  void showUnregisterDialog(BuildContext context, Device device) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Confirm'),
-          content:
-              const Text('Are you sure you want to unregister this device?'),
-          actions: <Widget>[
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                unregisterDevice(device.id);
-                Navigator.of(context).pop();
-                Navigator.of(context).pop();
-              },
-              child: const Text('Unregister'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    final session = Provider.of<SessionModel>(context, listen: true);
     return Scaffold(
       appBar: AppBar(
         title: const Text('IoT Devices'),
@@ -244,6 +95,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
               showModalBottomSheet(
                 context: context,
                 builder: (BuildContext context) {
+                  // TODO: filter adapter types by input box
                   TextEditingController searchController =
                       TextEditingController();
                   return Padding(
@@ -341,10 +193,10 @@ class _DeviceListPageState extends State<DeviceListPage> {
           ),
         ],
       ),
-      body: isLoading
+      body: session.isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: fetchDevices,
+              onRefresh: session.fetchDevices,
               child: Column(
                 children: [
                   Card(
@@ -363,8 +215,8 @@ class _DeviceListPageState extends State<DeviceListPage> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Text('IP: ${gatewayIp ?? 'Not found'}'),
-                          Text('Port: ${gatewayPort ?? 'Not found'}'),
+                          Text('IP: ${session.gatewayIp ?? 'Not found'}'),
+                          Text('Port: ${session.gatewayPort ?? 'Not found'}'),
                         ],
                       ),
                     ),
@@ -376,9 +228,9 @@ class _DeviceListPageState extends State<DeviceListPage> {
                         crossAxisCount: 2,
                         childAspectRatio: 4 / 2,
                       ),
-                      itemCount: devices.length,
+                      itemCount: session.devices.length,
                       itemBuilder: (context, index) {
-                        final device = devices[index];
+                        final device = session.devices[index];
                         return Card(
                           child: InkWell(
                             onTap: () {
@@ -425,7 +277,8 @@ class _DeviceListPageState extends State<DeviceListPage> {
                                             children: [
                                               Text('Status: ${device.status}'),
                                               Text('Device ID: ${device.id}'),
-                                              Text('Gateway IP: $gatewayIp'),
+                                              Text(
+                                                  'Gateway IP: ${session.gatewayIp}'),
                                             ],
                                           ),
                                         ),
@@ -435,7 +288,8 @@ class _DeviceListPageState extends State<DeviceListPage> {
                                             String action = device.status == "1"
                                                 ? '0'
                                                 : '1';
-                                            controlDevice(device.id, action);
+                                            session.controlDevice(
+                                                device.id, action);
                                             Navigator.of(context).pop();
                                           },
                                           child: Text(device.status == "1"
@@ -487,7 +341,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                                                         device.status == "1"
                                                             ? '0'
                                                             : '1';
-                                                    controlDevice(
+                                                    session.controlDevice(
                                                         device.id, action);
                                                   },
                                           ),
@@ -520,7 +374,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
               ),
             ),
       floatingActionButton: FloatingActionButton(
-        onPressed: fetchDevices,
+        onPressed: session.fetchDevices,
         tooltip: 'Refresh Devices',
         child: const Icon(Icons.refresh),
       ),

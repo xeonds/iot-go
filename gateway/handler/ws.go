@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
+	"gateway/controller"
+	"gateway/misc"
 	"gateway/model"
 	"log"
 	"net/http"
@@ -17,7 +20,33 @@ var deviceMessageChannel = make(chan model.DeviceAPIMessage, 100)
 
 func handleDeviceMessage(db *gorm.DB) {
 	for msg := range deviceMessageChannel {
-		log.Printf("处理设备消息: %s", msg.Message)
+		mesg, err := misc.ParseDSL(string(msg.Message))
+		if err != nil {
+			log.Printf("解析 DSL 错误: %v", err)
+			continue
+		}
+		switch mesg.Type {
+		case "data":
+			if mesg.Key == "status" {
+				db.Model(&model.Client{}).Where("id = ?", msg.DeviceID).Update("status", mesg.Value)
+			} else {
+				// dataRecord := model.Data{DeviceID: msg.DeviceID, Key: mesg.Key}
+				// if err := db.FirstOrCreate(&dataRecord, model.Data{DeviceID: msg.DeviceID, Key: mesg.Key}).Error; err != nil {
+				// 	log.Printf("创建或查找数据记录错误: %v", err)
+				// 	continue
+				// }
+				// if mesg.Limit > 0 {
+				// 	db.Model(&dataRecord).First(&dataRecord)
+				// 	if len(dataRecord.Value) >= mesg.Limit {
+				// 		dataRecord.Value = dataRecord.Value[1:] // pop the first element
+				// 	}
+				// 	dataRecord.Value = append(dataRecord.Value, mesg.Value)
+				// 	db.Model(&dataRecord).Update("value", dataRecord.Value)
+				// } else {
+				// 	db.Model(&dataRecord).Update("value", []string{mesg.Value})
+				// }
+			}
+		}
 	}
 }
 
@@ -32,6 +61,10 @@ func DeviceWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.H
 			c.JSON(http.StatusBadRequest, gin.H{"error": "设备 ID 不能为空"})
 			return
 		}
+		if db.First(&model.Client{}, "id = ?", id).Error != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "未注册设备"})
+			return
+		}
 		conn, err := (&websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool {
 				return true
@@ -43,6 +76,7 @@ func DeviceWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.H
 		defer conn.Close()
 		conns[id] = conn
 		db.FirstOrCreate(&model.Client{ID: id, Status: "online", Addr: c.ClientIP()})
+		log.Printf("%s 已连接", id)
 		var device model.Client
 		for {
 			_, message, err := conn.ReadMessage()
@@ -50,7 +84,7 @@ func DeviceWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.H
 				log.Println("读取消息错误:", err)
 				break
 			}
-			deviceMessageChannel <- model.DeviceAPIMessage{Conn: conn, Message: message}
+			deviceMessageChannel <- model.DeviceAPIMessage{Conn: conn, Message: message, DeviceID: id}
 		}
 
 		// 设备断开连接时，更新数据库
@@ -61,13 +95,31 @@ func DeviceWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.H
 
 var parentGatewayCmdChannel = make(chan struct {
 	Conn    *websocket.Conn
-	Message model.GatewayAPIMessage
+	Message string
 }, 100)
 
 // TODO: implement handle gateway api messages
 func handleGatewayCmds(db *gorm.DB) {
-	for msg := range parentGatewayCmdChannel {
-		log.Printf("处理父网关消息: %s", msg.Message)
+	for m := range parentGatewayCmdChannel {
+		msg, err := misc.ParseDSL(string(m.Message))
+		if err != nil {
+			log.Printf("解析 DSL 错误: %v", err)
+			continue
+		}
+		switch msg.Type {
+		case "devices":
+			res := controller.GetDevices(db)
+			response, err := json.Marshal(res)
+			if err != nil {
+				log.Printf("序列化设备列表错误: %v", err)
+				continue
+			}
+			err = m.Conn.WriteMessage(websocket.TextMessage, response)
+			if err != nil {
+				log.Printf("发送设备列表错误: %v", err)
+				continue
+			}
+		}
 	}
 }
 
@@ -78,16 +130,16 @@ func RegisterToParentGateway(parentGateway string) error {
 	}
 	defer conn.Close()
 	for {
-		var message model.GatewayAPIMessage
-		if err := conn.ReadJSON(&message); err != nil {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
 			log.Printf("读取父网关消息失败: %v", err)
 			continue
 		}
 		log.Printf("收到父网关消息: %s", message)
 		parentGatewayCmdChannel <- struct {
 			Conn    *websocket.Conn
-			Message model.GatewayAPIMessage
-		}{Conn: conn, Message: message}
+			Message string
+		}{Conn: conn, Message: string(message)}
 	}
 }
 

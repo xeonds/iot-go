@@ -3,107 +3,139 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand/v2"
+	"net/http"
 	"net/url"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/hashicorp/mdns"
 	"github.com/xeonds/libgc"
 )
 
 type Config struct {
-	ServerIP string `json:"server_ip"`
-	DeviceID string `json:"device_id"`
+	ServerIP   string `json:"server_ip"`
+	DeviceID   string `json:"device_id"`
+	Registered bool   `json:"registered"`
 }
 
-func getSensor() string {
-	temp := 20 + rand.Float64()*10
-	return fmt.Sprintf("status.temperature:%.2f", temp)
+var status int
+
+var actions = []string{
+	"action:open",
+	"action:close",
+	"action:+",
+	"action:-",
+	"action:get_status",
+}
+
+func getStatus() string {
+	return fmt.Sprintf("data.luminous:%d", status)
 }
 
 func main() {
+	// Discover server by _iot-gateway._tcp using mDNS
 	config := libgc.LoadConfig[Config]()
-	u := url.URL{Scheme: "ws", Host: config.ServerIP, Path: "/ws/device/" + config.DeviceID}
-	var wg sync.WaitGroup
 
+	entriesCh := make(chan *mdns.ServiceEntry, 4)
+	mdns.Lookup("_iot-gateway._tcp", entriesCh)
+	var serverIP, serverPort string
+	select {
+	case entry := <-entriesCh:
+		serverIP = entry.AddrV4.String()
+		serverPort = fmt.Sprintf("%d", entry.Port)
+	case <-time.After(5 * time.Second):
+		log.Fatal("mDNS lookup timed out")
+	}
+	log.Println("server found:", serverIP, serverPort)
+	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%s", serverIP, serverPort), Path: "/ws/device/" + config.DeviceID}
+
+	var c *websocket.Conn
 	recv := make(chan string)
 	send := make(chan string)
+
+	log.Println("registering")
+	form := url.Values{}
+	for _, action := range actions {
+		form.Add("actions", action)
+	}
+	resp, err := http.PostForm("http://"+serverIP+":"+serverPort+"/api/register/"+config.DeviceID, form)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		log.Print("failed to register: already registered")
+	}
+	// libgc.SaveConfig(config)
+	status = 0
+
 	// handler
-	realTimeMode := false
 	go func() {
 		for msg := range recv {
 			switch msg {
-			case "action:real_time_mode_on":
+			case "action:open":
 				log.Println("turning on")
-				realTimeMode = true
-			case "action:real_time_mode_off":
-				log.Println("turning off")
-				realTimeMode = false
-			case "action:get_temperature":
-				send <- getSensor()
+				status = 256
+			case "action:get_status":
+				send <- getStatus()
+			case "action:close":
+				status = 0
+				send <- getStatus()
+			case "action:+":
+				if status < 256 {
+					status += 32
+				}
+				send <- getStatus()
+			case "action:-":
+				if status > 0 {
+					status -= 32
+				}
+				send <- getStatus()
 			default:
-				log.Println("unknown action")
+				log.Println("unknown message:", msg)
 			}
 		}
 	}()
-	// sender
+
+	// connection guard
 	go func() {
-		ticker := time.NewTicker(time.Second * 1)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if realTimeMode {
-					send <- getSensor()
-				}
+		for range time.Tick(time.Second * 2) {
+			log.Printf("connecting to %s", u.String())
+			var err error
+			c, _, err = websocket.DefaultDialer.Dial(u.String(), nil)
+			if err != nil {
+				log.Println("dial:", err)
+				continue
 			}
+			log.Println("connected")
+			startListenAndSend(send, recv, c)
+			log.Println("disconnected, reconnecting in 2 seconds")
 		}
 	}()
-	for {
-		log.Printf("connecting to %s", u.String())
 
-		c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-		if err != nil {
-			log.Println("dial:", err)
-			time.Sleep(time.Second * 5) // Wait before retrying
-			continue
-		}
-		log.Println("connected")
-		defer c.Close()
+	// recv messages from conn
+	select {}
+}
 
-		// recv messages from conn
-		go func() {
-			wg.Add(1)
-			for {
-				_, message, err := c.ReadMessage()
-				if err != nil {
-					log.Println("read:", err)
-					wg.Done()
-					return
-				}
+func startListenAndSend(send, recv chan string, c *websocket.Conn) {
+	go func() {
+		for {
+			if _, message, err := c.ReadMessage(); err != nil {
+				log.Println("read:", err)
+				return
+			} else {
 				recv <- string(message)
 			}
-		}()
-		// send messages to conn in chan
-		go func() {
-			wg.Add(1)
-			for {
-				select {
-				case message := <-send:
-					err := c.WriteMessage(websocket.TextMessage, []byte(message))
-					if err != nil {
-						log.Println("write:", err)
-						wg.Done()
-						return
-					}
-					log.Println("sent:", message)
-				}
+		}
+	}()
+	// send messages to conn in chan
+	go func() {
+		for message := range send {
+			if err := c.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
+				log.Println("write:", err)
+				return
 			}
-		}()
-
-		wg.Wait()
-		log.Println("connection closed, retrying in 3 seconds")
-		time.Sleep(time.Second * 3)
-	}
+			log.Println("sent:", message)
+		}
+	}()
+	select {}
 }

@@ -11,3 +11,6 @@ iot-go-gateway-linux-amd64: main.go
 
 run: iot-go-gateway-linux-amd64
 	./iot-go-gateway-linux-amd64
+
+call-temperature:
+	curl -X POST localhost:1234/api/control/test_client_1/action:get_temperature

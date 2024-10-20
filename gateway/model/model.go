@@ -15,14 +15,15 @@ type Rule struct {
 	Action    string `json:"action"`
 }
 
-type GatewayAPIMessage struct {
-	Type       string
-	DeviceID   string
-	DeviceName string
-	Action     string
+type Data struct {
+	ID       uint     `gorm:"primarykey" json:"id"`
+	DeviceID string   `gorm:"index" json:"device_id"`
+	Key      string   `gorm:"uniqueIndex" json:"key"`
+	Value    []string `gorm:"serializer:json" json:"value"`
 }
 
 type DeviceAPIMessage struct {
-	Conn    *websocket.Conn
-	Message []byte
+	Conn     *websocket.Conn
+	DeviceID string
+	Message  []byte
 }

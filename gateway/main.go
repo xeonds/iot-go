@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"gateway/config"
 	"gateway/controller"
@@ -18,7 +19,7 @@ import (
 func main() {
 	config := libgc.LoadConfig[config.Config]()
 	db := libgc.NewDB(&config.DB, func(db *gorm.DB) error {
-		return db.AutoMigrate(&model.Client{}, &model.Rule{})
+		return db.AutoMigrate(&model.Client{}, &model.Rule{}, &model.Data{})
 	})
 	gatewayConns, clientConns := make(map[string]*websocket.Conn), make(map[string]*websocket.Conn)
 	router := gin.Default()
@@ -46,6 +47,25 @@ func main() {
 			misc.GinErrWrapper(c, err)
 		})
 		api.GET("/devices", func(c *gin.Context) {
+			clients := new([]model.Client)
+			if len(gatewayConns) > 0 {
+				for _, conn := range gatewayConns {
+					if conn != nil {
+						if err := conn.WriteMessage(websocket.TextMessage, []byte("devices")); err != nil {
+							log.Printf("failed to send WebSocket message: %v", err)
+						}
+						_, msg, err := conn.ReadMessage()
+						if err != nil {
+							log.Printf("failed to read WebSocket message: %v", err)
+						}
+						var client []model.Client
+						if err := json.Unmarshal(msg, &client); err != nil {
+							log.Printf("failed to unmarshal devices: %v", err)
+						}
+						*clients = append(*clients, client...)
+					}
+				}
+			}
 			c.JSON(200, controller.GetDevices(db))
 		})
 	}
