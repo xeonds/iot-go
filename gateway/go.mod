@@ -6,6 +6,7 @@ require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/grandcat/zeroconf v1.0.0
+	github.com/hashicorp/mdns v1.0.5
 	github.com/xeonds/libgc v0.0.0-20241003082750-27fc6f8ce6b5
 	gorm.io/gorm v1.25.12
 )

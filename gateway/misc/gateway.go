@@ -7,18 +7,23 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/grandcat/zeroconf"
+	"github.com/hashicorp/mdns"
 )
 
 func RunmDnsBroadcast(config *config.Config) {
 	serviceName := "_iot-gateway._tcp"
-	serviceDomain := "local."
 	servicePort := config.Port
 	instanceName := "iot-gateway-instance"
 
-	server, err := zeroconf.Register(instanceName, serviceName, serviceDomain, servicePort, []string{"gateway"}, nil)
+	info := []string{"gateway"}
+	service, err := mdns.NewMDNSService(instanceName, serviceName, "", "", servicePort, nil, info)
 	if err != nil {
-		log.Fatalf("Failed to register mDNS service: %v", err)
+		log.Fatalf("Failed to create mDNS service: %v", err)
+	}
+
+	server, err := mdns.NewServer(&mdns.Config{Zone: service})
+	if err != nil {
+		log.Fatalf("Failed to start mDNS server: %v", err)
 	}
 	defer server.Shutdown()
 	log.Printf("mDNS service %s.%s:%d published", instanceName, serviceName, servicePort)

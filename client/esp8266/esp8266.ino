@@ -117,11 +117,11 @@ void setup()
       Serial.println("Failed to reach server, finding by mDNS");
       delay(2000);
     find_mdns:
-      MDNS.queryService("iot-gateway", "tcp", 10000);
+      int n = MDNS.queryService("iot-gateway", "tcp");
       Serial.print(".");
-      if (MDNS.port(0)==0)
+      if (0==n)
       {
-        delay(500);
+        delay(1000);
         goto find_mdns;
       }
       else
