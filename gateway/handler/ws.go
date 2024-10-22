@@ -74,6 +74,7 @@ func DeviceWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.H
 			return
 		}
 		defer conn.Close()
+		// TODO:（设备重名）如果当前连接非空，关闭之前的连接
 		conns[id] = conn
 		db.FirstOrCreate(&model.Client{ID: id, Status: "online", Addr: c.ClientIP()})
 		log.Printf("%s 已连接", id)

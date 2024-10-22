@@ -2,7 +2,7 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <EEPROM.h>
-#include <Regexp.h>
+#include <regex>
 #include <ArduinoWebsockets.h>
 #include <ESP8266HTTPClient.h>
 
@@ -21,10 +21,12 @@ char deviceId[13];                      // 设备唯一 ID (MAC 地址后 6 位)
 
 ESP8266WebServer server(80);
 
-struct WiFiCredentials
+struct Config
 {
   char ssid[32];
   char password[64];
+  char serverIp[16];
+  char serverPort[6];
 };
 
 struct Message
@@ -35,14 +37,14 @@ struct Message
   String Value;
 };
 
-WiFiCredentials savedCredentials;
+Config config;
 
 WebsocketsClient webSocket;
 
 void setup()
 {
   Serial.begin(115200);
-  EEPROM.begin(sizeof(WiFiCredentials));
+  EEPROM.begin(sizeof(Config));
 
   pinMode(buttonPin, INPUT_PULLUP); // 使用内部上拉电阻
   pinMode(outputPin, OUTPUT);       // 配置为输出引脚
@@ -55,10 +57,10 @@ void setup()
 
   // 尝试连接保存的 WiFi
   // 如果连接失败，启动 AP 模式配网
-  EEPROM.get(0, savedCredentials);
-  if (strlen(savedCredentials.ssid) > 0)
+  EEPROM.get(0, config);
+  if (strlen(config.ssid) > 0)
   {
-    WiFi.begin(savedCredentials.ssid, savedCredentials.password);
+    WiFi.begin(config.ssid, config.password);
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20)
     {
@@ -72,71 +74,75 @@ void setup()
       Serial.print("IP address: ");
       Serial.println(WiFi.localIP());
 
-      // Start mDNS responder
-      if (!MDNS.begin(deviceId))
-      {
-        Serial.println("Error setting up MDNS responder!");
-        return;
-      }
-      Serial.println("mDNS responder started");
+      // // Start mDNS responder
+      // if (!MDNS.begin(deviceId))
+      // {
+      //   Serial.println("Error setting up MDNS responder!");
+      //   return;
+      // }
+      // Serial.println("mDNS responder started");
 
-    mdns:
+      // mdns:
       // Check the EEPROM and try to ping the server
-      String savedServerIp;
-      String savedServerPort;
-      EEPROM.get(sizeof(WiFiCredentials), savedServerIp);
-      EEPROM.get(sizeof(WiFiCredentials) + 16, savedServerPort);
+      Serial.println("Trying to reach server");
+      Serial.println(String(config.serverIp));
+      Serial.println(String(config.serverPort));
 
-      if (savedServerIp.length() > 0 && savedServerPort.length() > 0)
+      if (strlen(config.serverIp) > 0 && strlen(config.serverPort) > 0)
       {
         Serial.print("Trying to connect to saved server: ");
-        Serial.print(savedServerIp);
+        Serial.print(config.serverIp);
         Serial.print(":");
-        Serial.println(savedServerPort);
+        Serial.println(config.serverPort);
 
         int pingAttempts = 0;
         bool serverReachable = false;
         Serial.println("Server found");
         HTTPClient http;
         WiFiClient client;
-        http.begin(client, "http://" + savedServerIp + ":" + savedServerPort + "/api/register/" + deviceId);
-        int httpCode = http.GET();
+        http.begin(client, "http://" + String(config.serverIp) + ":" + String(config.serverPort) + "/api/register/" + deviceId);
+        http.addHeader("Content-Type", "application/json");
+        String payload = "{\"deviceId\":\"" + String(deviceId) + "\", \"deviceType\":\"" + String(deviceType) + "\"}";
+        int httpCode = http.POST(payload);
         if (httpCode != HTTP_CODE_OK)
         {
           Serial.printf("Failed to connect, error: %s\n", http.errorToString(httpCode).c_str());
           http.end();
+        }
+        else
+        {
+          Serial.println("Device registered successfully");
+          webSocket.onMessage(webSocketMessage);
+          webSocket.onEvent(webSocketEvent);
+          webSocket.connect("ws://" + String(config.serverIp) + ":" + String(config.serverPort) + "/ws/device/" + String(deviceId));
+          Serial.println("Server connected");
           return;
         }
-        Serial.println("Device registered successfully");
-
-        webSocket.onMessage(webSocketMessage);
-        webSocket.onEvent(webSocketEvent);
-        webSocket.connect("ws://" + savedServerIp + ":" + savedServerPort + "/ws/device/" + String(deviceId));
-        Serial.println("Server connected");
       }
-      Serial.println("Failed to reach server, finding by mDNS");
-      delay(2000);
-    find_mdns:
-      int n = MDNS.queryService("iot-gateway", "tcp");
-      Serial.print(".");
-      if (0==n)
-      {
-        delay(1000);
-        goto find_mdns;
-      }
-      else
-      {
-        Serial.println("Server found: " + MDNS.IP(0).toString() + ":" + MDNS.port(0));
-        // Save the first found server's info to EEPROM
-        String serverIp = MDNS.IP(0).toString();
-        String serverPort = String(MDNS.port(0));
-        EEPROM.put(sizeof(WiFiCredentials), serverIp);
-        EEPROM.put(sizeof(WiFiCredentials) + 16, serverPort);
-        EEPROM.commit();
-        Serial.println("Server info saved to EEPROM");
-        goto mdns;
-      }
-      return;
+      Serial.println("Failed to reach server, reconfigure needed");
+      // Serial.println("Failed to reach server, finding by mDNS");
+      // delay(2000);
+      // find_mdns:
+      //   int n = MDNS.queryService("iot-gateway", "tcp", 8000);
+      //   Serial.print(".");
+      //   if (0==n)
+      //   {
+      //     delay(1000);
+      //     goto find_mdns;
+      //   }
+      //   else
+      //   {
+      //     Serial.println("Server found: " + MDNS.IP(0).toString() + ":" + MDNS.port(0));
+      //     // Save the first found server's info to EEPROM
+      //     String serverIp = MDNS.IP(0).toString();
+      //     String serverPort = String(MDNS.port(0));
+      //     EEPROM.put(sizeof(WiFiCredentials), serverIp);
+      //     EEPROM.put(sizeof(WiFiCredentials) + 16, serverPort);
+      //     EEPROM.commit();
+      //     Serial.println("Server info saved to EEPROM");
+      //     goto mdns;
+      // }
+      // return;
     }
   }
   server.on("/configure", handleConfigure);
@@ -171,6 +177,8 @@ void handleRoot()
   html += "<form action='/configure' method='post'>";
   html += "SSID: <input type='text' name='ssid'><br>";
   html += "Password: <input type='password' name='password'><br>";
+  html += "ServerIP: <input type='text' name='ip'><br>";
+  html += "ServerPort: <input type='text' name='port'><br>";
   html += "<input type='submit' value='Configure'>";
   html += "</form></body></html>";
   server.send(200, "text/html", html);
@@ -179,11 +187,15 @@ void handleConfigure()
 {
   String newSsid = server.arg("ssid");
   String newPassword = server.arg("password");
+  String newServerIp = server.arg("ip");
+  String newServerPort = server.arg("port");
 
-  strncpy(savedCredentials.ssid, newSsid.c_str(), sizeof(savedCredentials.ssid));
-  strncpy(savedCredentials.password, newPassword.c_str(), sizeof(savedCredentials.password));
+  strncpy(config.ssid, newSsid.c_str(), sizeof(config.ssid));
+  strncpy(config.password, newPassword.c_str(), sizeof(config.password));
+  strncpy(config.serverIp, newServerIp.c_str(), sizeof(config.serverIp));
+  strncpy(config.serverPort, newServerPort.c_str(), sizeof(config.serverPort));
 
-  EEPROM.put(0, savedCredentials);
+  EEPROM.put(0, config);
   EEPROM.commit();
 
   server.send(200, "text/plain", "Configuration saved. Rebooting...");
@@ -243,7 +255,7 @@ void webSocketMessage(WebsocketsMessage message)
     }
     else if (msg.Value == "reset")
     {
-      for (int i = 0; i < sizeof(WiFiCredentials) + 16 + 16; i++)
+      for (int i = 0; i < sizeof(Config) + 16 + 16; i++)
       {
         EEPROM.write(i, 0);
       }
@@ -275,32 +287,45 @@ void webSocketEvent(WebsocketsEvent event, String data)
 
 bool ParseDSL(String &dsl, Message &message)
 {
-  MatchState ms;
-  ms.Target((char *)dsl.c_str());
+  std::regex pattern(R"(^(\w+)(?:\.(\w+))?(?:\[(\d+)\])?(?::(.+))?$)");
+  std::smatch matches;
 
-  // Regular expression pattern
-  const char *pattern = "^([%w_]+)(?:%.([%w_]+))?(?:%[(%d+)%])?(?::(.+))?$";
-  char result = ms.Match(pattern);
+  std::string dslStr = dsl.c_str();
 
-  if (result == REGEXP_NOMATCH)
+  if (!std::regex_match(dslStr, matches, pattern))
   {
     Serial.println("Invalid DSL format");
     return false;
   }
 
-  // Extract matches
-  char buf[50];
-  ms.GetCapture(buf, 0);
-  message.Type = String(buf);
+  message.Type = matches[1].str().c_str();
 
-  ms.GetCapture(buf, 1);
-  message.Key = String(buf);
+  if (matches[2].matched)
+  {
+    message.Key = matches[2].str().c_str();
+  }
+  else
+  {
+    message.Key = "";
+  }
 
-  ms.GetCapture(buf, 2);
-  message.Limit = atoi(buf);
+  if (matches[3].matched)
+  {
+    message.Limit = std::stoi(matches[3].str());
+  }
+  else
+  {
+    message.Limit = 0;
+  }
 
-  ms.GetCapture(buf, 3);
-  message.Value = String(buf);
+  if (matches[4].matched)
+  {
+    message.Value = matches[4].str().c_str();
+  }
+  else
+  {
+    message.Value = "";
+  }
 
   return true;
 }

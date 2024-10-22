@@ -3,6 +3,7 @@ package controller
 import (
 	"gateway/misc"
 	"gateway/model"
+	"log"
 
 	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
@@ -10,6 +11,10 @@ import (
 
 func RegisterDevice(db *gorm.DB, id, name, addr string) error {
 	client := model.Client{ID: id, Name: name, Addr: addr}
+	if err := db.First(&model.Client{}, "id = ?", id).Error; err == nil {
+		log.Println("device already registered")
+		return nil
+	}
 	return db.Create(&client).Error
 }
 
