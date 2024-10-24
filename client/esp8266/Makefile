@@ -24,7 +24,7 @@ minus:
 	curl -X POST "localhost:1234/api/control/1E80B5/action:-"
 
 get-status:
-	curl $i/status
+	curl -X POST "localhost:1234/api/control/1E80B5/action:-"
 
 find-usb:
 	ls /dev|grep USB

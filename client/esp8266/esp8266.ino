@@ -216,6 +216,11 @@ void webSocketMessage(WebsocketsMessage message)
 
   static int pwmValue = 0;
 
+  if (msg.Type == "info") {
+    if (msg.Value == "cmds") {
+      webSocket.send("data.cmds: \"action:on;action:off;action:toggle;action:get_status;action:+;action:-;action.pwm:INT;action:reset\"");
+    }
+  }
   if (msg.Type == "action")
   {
     if (msg.Value == "on")

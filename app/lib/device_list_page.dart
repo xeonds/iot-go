@@ -3,6 +3,9 @@ import 'package:app/wifi_setup_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+/* TODO: cache device actions from server's /api/device/cmds
+  and generate item's control panel based on the action cmds
+*/
 class DeviceListPage extends StatefulWidget {
   const DeviceListPage({super.key});
 
