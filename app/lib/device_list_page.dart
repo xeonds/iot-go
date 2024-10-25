@@ -3,9 +3,6 @@ import 'package:app/wifi_setup_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-/* TODO: cache device actions from server's /api/device/cmds
-  and generate item's control panel based on the action cmds
-*/
 class DeviceListPage extends StatefulWidget {
   const DeviceListPage({super.key});
 
@@ -237,85 +234,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                         return Card(
                           child: InkWell(
                             onTap: () {
-                              showModalBottomSheet(
-                                context: context,
-                                builder: (BuildContext context) {
-                                  return Padding(
-                                    padding: const EdgeInsets.all(16.0),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Row(children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.arrow_back),
-                                            onPressed: () {
-                                              Navigator.of(context).pop();
-                                            },
-                                          ),
-                                          const Text(
-                                            "Device Details",
-                                            style: TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            textAlign: TextAlign.left,
-                                          ),
-                                        ]),
-                                        const SizedBox(height: 16),
-                                        ListTile(
-                                          leading: const Icon(Icons.info),
-                                          title: Text(
-                                            device.name == ''
-                                                ? device.id
-                                                : device.name,
-                                            style: const TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          subtitle: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text('Status: ${device.status}'),
-                                              Text('Device ID: ${device.id}'),
-                                              Text(
-                                                  'Gateway IP: ${session.gatewayIp}'),
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        ElevatedButton(
-                                          onPressed: () {
-                                            String action = device.status == "1"
-                                                ? '0'
-                                                : '1';
-                                            session.controlDevice(
-                                                device.id, action);
-                                            Navigator.of(context).pop();
-                                          },
-                                          child: Text(device.status == "1"
-                                              ? 'Turn Off'
-                                              : 'Turn On'),
-                                        ),
-                                        const SizedBox(height: 16),
-                                        ElevatedButton(
-                                            onPressed: () => showRenameDialog(
-                                                context, device),
-                                            child: const Text('Rename Device')),
-                                        const SizedBox(height: 16),
-                                        ElevatedButton(
-                                          onPressed: () => showUnregisterDialog(
-                                              context, device),
-                                          child:
-                                              const Text('Unregister Device'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              );
+                              deviceCardOnClick(context, device, session);
                             },
                             child: Padding(
                                 padding:
@@ -332,18 +251,18 @@ class _DeviceListPageState extends State<DeviceListPage> {
                                           IconButton(
                                             icon: const Icon(
                                                 Icons.power_settings_new),
-                                            color: device.status == "1"
-                                                ? Colors.green
+                                            color: device.status == "-1"
+                                                ? Colors.grey
                                                 : device.status == "0"
                                                     ? Colors.black
-                                                    : Colors.grey,
+                                                    : Colors.green,
                                             onPressed: device.status == "-1"
                                                 ? null
                                                 : () {
                                                     String action =
-                                                        device.status == "1"
-                                                            ? '0'
-                                                            : '1';
+                                                        device.status == "0"
+                                                            ? 'action:on'
+                                                            : 'action:off';
                                                     session.controlDevice(
                                                         device.id, action);
                                                   },
@@ -382,5 +301,132 @@ class _DeviceListPageState extends State<DeviceListPage> {
         child: const Icon(Icons.refresh),
       ),
     );
+  }
+
+  Future<dynamic> deviceCardOnClick(
+      BuildContext context, Device device, SessionModel session) {
+    return showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                  const Text(
+                    "Device Details",
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.left,
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.info),
+                  title: Text(
+                    device.name == '' ? device.id : device.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Status: ${device.status}'),
+                      Text('Device ID: ${device.id}'),
+                      Text('Gateway IP: ${session.gatewayIp}'),
+                    ],
+                  ),
+                ),
+                ...controlPanelBuilder(context, device),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                    onPressed: () => showRenameDialog(context, device),
+                    child: const Text('Rename Device')),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () => showUnregisterDialog(context, device),
+                  child: const Text('Unregister Device'),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  List<Widget> controlPanelBuilder(BuildContext context, Device device) {
+    List<Widget> controlPanel = [];
+    final session = Provider.of<SessionModel>(context, listen: false);
+    if (device.cmds != "") {
+      final cmds = device.cmds.split(';');
+      for (var cmd in cmds) {
+        if (cmd != "") {
+          final cmdParts = cmd.split('->')[0].split(':');
+          if (cmdParts[1] == 'reset') continue;
+
+          if (cmdParts[0].split('.').length == 1) {
+            controlPanel.add(TextButton(
+              onPressed: () {
+                session.controlDevice(device.id, cmd.split('->')[0]);
+              },
+              child: Text(cmdParts[1]),
+            ));
+          } else {
+            TextEditingController paramController = TextEditingController();
+            controlPanel.add(Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        cmdParts[0].split('.')[1],
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      TextField(
+                        controller: paramController,
+                        decoration: InputDecoration(
+                          labelText: 'Enter value of ${cmdParts[1]}:',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final paramValue = paramController.text;
+                    final fullAction = '${cmdParts[0]}:$paramValue';
+                    paramController.clear();
+                    session.controlDevice(device.id, fullAction);
+                  },
+                  child: const Text('Send'),
+                ),
+              ],
+            ));
+          }
+
+          controlPanel.add(const SizedBox(height: 8));
+        }
+      }
+    }
+    if (controlPanel.isEmpty) {
+      controlPanel.add(const Text('No actions available'));
+    }
+    return controlPanel;
   }
 }

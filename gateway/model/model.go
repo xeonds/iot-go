@@ -7,6 +7,7 @@ type Client struct {
 	Name   string `json:"name"`
 	Addr   string `json:"addr"`
 	Status string `json:"status"`
+	Cmds   string `json:"cmds"`
 }
 
 type Rule struct {

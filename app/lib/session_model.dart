@@ -8,14 +8,21 @@ class Device {
   final String id;
   String name;
   String status;
+  String cmds;
 
-  Device({required this.id, required this.name, required this.status});
+  Device({
+    required this.id,
+    required this.name,
+    required this.status,
+    required this.cmds,
+  });
 
   factory Device.fromJson(Map<String, dynamic> json) {
     return Device(
       id: json['id'],
       name: json['name'],
       status: json['status'],
+      cmds: json['cmds'],
     );
   }
 }
@@ -90,10 +97,12 @@ class SessionModel extends ChangeNotifier {
           Uri.parse('http://$gatewayIp:$gatewayPort/api/control/$id/$action'));
       if (response.statusCode == 200) {
         print('Device $id action $action successful');
-        devices.firstWhere((device) => device.id == id).status = action;
       }
     } catch (e) {
       print('Error controlling device: $e');
+    } finally {
+      await Future.delayed(const Duration(seconds: 1));
+      await fetchDevices();
     }
   }
 
@@ -111,6 +120,10 @@ class SessionModel extends ChangeNotifier {
       }
     } catch (e) {
       print('Error unregistering device: $e');
+    } finally {
+      await Future.delayed(const Duration(seconds: 1));
+      await fetchDevices();
+      notifyListeners();
     }
   }
 
@@ -127,6 +140,10 @@ class SessionModel extends ChangeNotifier {
       }
     } catch (e) {
       print('Error renaming device: $e');
+    } finally {
+      await Future.delayed(const Duration(seconds: 1));
+      await fetchDevices();
+      notifyListeners();
     }
   }
 }

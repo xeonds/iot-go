@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"gateway/config"
 	"gateway/controller"
@@ -9,6 +8,7 @@ import (
 	"gateway/misc"
 	"gateway/model"
 	"log"
+	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -28,7 +28,14 @@ func main() {
 	api := router.Group("/api")
 	{
 		api.POST("/register/:id", func(c *gin.Context) {
-			err := controller.RegisterDevice(db, c.Param("id"), "", c.ClientIP())
+			data := new(struct {
+				Cmds string `json:"cmds"`
+			})
+			if err := c.ShouldBindJSON(data); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			err := controller.RegisterDevice(db, c.Param("id"), "", c.ClientIP(), data.Cmds)
 			misc.GinErrWrapper(c, err)
 		})
 		api.POST("/control/:id/:action", func(c *gin.Context) {
@@ -47,25 +54,25 @@ func main() {
 			misc.GinErrWrapper(c, err)
 		})
 		api.GET("/devices", func(c *gin.Context) {
-			clients := new([]model.Client)
-			if len(gatewayConns) > 0 {
-				for _, conn := range gatewayConns {
-					if conn != nil {
-						if err := conn.WriteMessage(websocket.TextMessage, []byte("devices")); err != nil {
-							log.Printf("failed to send WebSocket message: %v", err)
-						}
-						_, msg, err := conn.ReadMessage()
-						if err != nil {
-							log.Printf("failed to read WebSocket message: %v", err)
-						}
-						var client []model.Client
-						if err := json.Unmarshal(msg, &client); err != nil {
-							log.Printf("failed to unmarshal devices: %v", err)
-						}
-						*clients = append(*clients, client...)
-					}
-				}
-			}
+			// clients := new([]model.Client)
+			// if len(gatewayConns) > 0 {
+			// 	for _, conn := range gatewayConns {
+			// 		if conn != nil {
+			// 			if err := conn.WriteMessage(websocket.TextMessage, []byte("devices")); err != nil {
+			// 				log.Printf("failed to send WebSocket message: %v", err)
+			// 			}
+			// 			_, msg, err := conn.ReadMessage()
+			// 			if err != nil {
+			// 				log.Printf("failed to read WebSocket message: %v", err)
+			// 			}
+			// 			var client []model.Client
+			// 			if err := json.Unmarshal(msg, &client); err != nil {
+			// 				log.Printf("failed to unmarshal devices: %v", err)
+			// 			}
+			// 			*clients = append(*clients, client...)
+			// 		}
+			// 	}
+			// }
 			c.JSON(200, controller.GetDevices(db))
 		})
 	}

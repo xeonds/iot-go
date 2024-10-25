@@ -102,7 +102,7 @@ void setup()
         WiFiClient client;
         http.begin(client, "http://" + String(config.serverIp) + ":" + String(config.serverPort) + "/api/register/" + deviceId);
         http.addHeader("Content-Type", "application/json");
-        String payload = "{\"deviceId\":\"" + String(deviceId) + "\", \"deviceType\":\"" + String(deviceType) + "\"}";
+        String payload = "{\"deviceId\":\"" + String(deviceId) + "\", \"deviceType\":\"" + String(deviceType) + "\", \"cmds\":\"action:on->null;action:off->null;action:toggle->null;action:get_status->data.status:int;action:+->null;action:-->null;action.pwm:int->null;action:reset->null;\"}";
         int httpCode = http.POST(payload);
         if (httpCode != HTTP_CODE_OK)
         {
@@ -218,45 +218,50 @@ void webSocketMessage(WebsocketsMessage message)
 
   if (msg.Type == "info") {
     if (msg.Value == "cmds") {
-      webSocket.send("data.cmds: \"action:on;action:off;action:toggle;action:get_status;action:+;action:-;action.pwm:INT;action:reset\"");
+      webSocket.send("data.cmds: \"action:on->null;action:off->null;action:toggle->null;action:get_status->data.status:int;action:+->null;action:-->null;action.pwm:int->null;action:reset->null\"");
     }
   }
   if (msg.Type == "action")
   {
     if (msg.Value == "on")
     {
-      pwmValue = 1023;
+      pwmValue = 255;
       analogWrite(outputPin, pwmValue);
+      webSocket.send("data.status:" + String(pwmValue));
     }
     else if (msg.Value == "off")
     {
       pwmValue = 0;
       analogWrite(outputPin, pwmValue);
+      webSocket.send("data.status:" + String(pwmValue));
     }
     else if (msg.Value == "toggle")
     {
-      pwmValue = (pwmValue == 0) ? 1023 : 0;
+      pwmValue = (pwmValue == 0) ? 255 : 0;
       analogWrite(outputPin, pwmValue);
+      webSocket.send("data.status:" + String(pwmValue));
     }
     else if (msg.Value == "get_status")
     {
-      String status = (pwmValue > 0) ? "on" : "off";
-      webSocket.send("data.status:" + status);
+      webSocket.send("data.status:" + String(pwmValue));
     }
     else if (msg.Value == "+")
     {
-      pwmValue = min(pwmValue + 64, 1023);
+      pwmValue = min(pwmValue + 16, 255);
       analogWrite(outputPin, pwmValue);
+      webSocket.send("data.status:" + String(pwmValue));
     }
     else if (msg.Value == "-")
     {
-      pwmValue = max(pwmValue - 64, 0);
+      pwmValue = max(pwmValue - 16, 0);
       analogWrite(outputPin, pwmValue);
+      webSocket.send("data.status:" + String(pwmValue));
     }
     else if (msg.Key == "pwm")
     {
       pwmValue = msg.Value.toInt();
-      analogWrite(outputPin, constrain(pwmValue, 0, 1023));
+      analogWrite(outputPin, constrain(pwmValue, 0, 255));
+      webSocket.send("data.status:" + String(pwmValue));
     }
     else if (msg.Value == "reset")
     {

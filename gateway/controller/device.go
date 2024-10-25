@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
-func RegisterDevice(db *gorm.DB, id, name, addr string) error {
-	client := model.Client{ID: id, Name: name, Addr: addr}
+func RegisterDevice(db *gorm.DB, id, name, addr, cmds string) error {
+	client := model.Client{ID: id, Name: name, Addr: addr, Cmds: cmds}
 	if err := db.First(&model.Client{}, "id = ?", id).Error; err == nil {
 		log.Println("device already registered")
 		return nil
