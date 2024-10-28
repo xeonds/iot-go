@@ -216,8 +216,10 @@ void webSocketMessage(WebsocketsMessage message)
 
   static int pwmValue = 0;
 
-  if (msg.Type == "info") {
-    if (msg.Value == "cmds") {
+  if (msg.Type == "info")
+  {
+    if (msg.Value == "cmds")
+    {
       webSocket.send("data.cmds: \"action:on->null;action:off->null;action:toggle->null;action:get_status->data.status:int;action:+->null;action:-->null;action.pwm:int->null;action:reset->null\"");
     }
   }
@@ -284,11 +286,16 @@ void webSocketEvent(WebsocketsEvent event, String data)
   else if (event == WebsocketsEvent::ConnectionClosed)
   {
     Serial.println("WebSocket Disconnected");
+    while (!webSocket.available())
+    {
+      Serial.println("Attempting to reconnect to WebSocket server...");
+      webSocket.connect("ws://" + String(config.serverIp) + ":" + String(config.serverPort) + "/ws/device/" + String(deviceId));
+      delay(5000); // Wait for 5 seconds before retrying
+    }
+    Serial.println("WebSocket Reconnected");
   }
   else if (event == WebsocketsEvent::GotPing)
-  {
     Serial.println("WebSocket Got a Ping!");
-  }
   else if (event == WebsocketsEvent::GotPong)
   {
     Serial.println("WebSocket Got a Pong!");
