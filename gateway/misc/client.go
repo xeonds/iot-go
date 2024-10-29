@@ -24,7 +24,7 @@ func MonitorDeviceConnections(connections map[string]*websocket.Conn, db *gorm.D
 				}
 				if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 					log.Printf("设备 %s 心跳检测失败，标记为离线", deviceID)
-					db.Model(&model.Client{}).Where("id = ?", deviceID).Update("status", "offline")
+					db.Model(&model.Client{}).Where("id = ?", deviceID).Update("status", "-1")
 					connections[deviceID] = nil
 				}
 			}

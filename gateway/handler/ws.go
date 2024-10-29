@@ -73,24 +73,25 @@ func DeviceWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.H
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法升级为 WebSocket"})
 			return
 		}
-		defer conn.Close()
+		defer func() {
+			conns[id] = nil
+			conn.Close()
+		}()
 		// TODO:（设备重名）如果当前连接非空，关闭之前的连接
 		conns[id] = conn
-		db.FirstOrCreate(&model.Client{ID: id, Status: "online", Addr: c.ClientIP()})
+		db.FirstOrCreate(&model.Client{ID: id, Status: "0", Addr: c.ClientIP()})
 		log.Printf("%s 已连接", id)
 		var device model.Client
 		for {
 			_, message, err := conn.ReadMessage()
+			// 设备断开连接时，更新数据库
 			if err != nil {
 				log.Println("读取消息错误:", err)
-				break
+				db.Model(&device).Where("id = ?", device.ID).Update("status", "-1")
+				return
 			}
 			deviceMessageChannel <- model.DeviceAPIMessage{Conn: conn, Message: message, DeviceID: id}
 		}
-
-		// 设备断开连接时，更新数据库
-		db.Model(&device).Where("id = ?", device.ID).Update("status", "-1")
-		conns[id] = nil
 	}
 }
 
