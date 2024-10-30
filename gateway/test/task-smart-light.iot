@@ -1,0 +1,22 @@
+(* example for tomato clock with smart light *)
+when action.tomato_clock is, lightA.data.battery in: true, [35, 100]: do loop f {
+    lightA.conn < action:on
+    f < suspend 25 min
+    lightA.conn < action: off
+                < data.battery:int
+    f < suspend 5 min
+    lightA.data.tomato_count += 1
+  }
+  | true, [20, 35): loop 5 f {
+    lightA.conn < action:on
+    f < suspend 25 min
+    lightA.conn < action: off
+                < data.battery:int
+    f < suspend 5 min
+    lightA.data.tomato_count += 1
+  }
+  | true, (0,20): {
+    action.tomato_clock < data.result[-1]:"action failed due to battery low"
+    f < break
+  }
+  | *, *: {}

@@ -95,9 +95,6 @@ class _DeviceListPageState extends State<DeviceListPage> {
               showModalBottomSheet(
                 context: context,
                 builder: (BuildContext context) {
-                  // TODO: filter adapter types by input box
-                  TextEditingController searchController =
-                      TextEditingController();
                   return Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -135,47 +132,49 @@ class _DeviceListPageState extends State<DeviceListPage> {
                                 'Wifi Device',
                                 'Bluetooth Device'
                               ];
-                              final deviceType = deviceTypes[index];
+                              final deviceIcons = [Icons.wifi, Icons.bluetooth];
+                              final actions = {
+                                'Wifi Device': () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => WiFiSetupPage(),
+                                    ),
+                                  );
+                                },
+                                'Bluetooth Device': () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                      return AlertDialog(
+                                        title: const Text('Info'),
+                                        content:
+                                            const Text('Not Implemented Yet'),
+                                        actions: <Widget>[
+                                          TextButton(
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                            },
+                                            child: const Text('OK'),
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
+                              };
+
                               return Card(
                                 child: InkWell(
-                                  onTap: () {
-                                    if (deviceType == 'Wifi Device') {
-                                      Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                WiFiSetupPage(),
-                                          ));
-                                    } else if (deviceType ==
-                                        'Bluetooth Device') {
-                                      showDialog(
-                                        context: context,
-                                        builder: (BuildContext context) {
-                                          return AlertDialog(
-                                            title: const Text('Info'),
-                                            content: const Text(
-                                                'Not Implemented Yet'),
-                                            actions: <Widget>[
-                                              TextButton(
-                                                onPressed: () {
-                                                  Navigator.of(context).pop();
-                                                },
-                                                child: const Text('OK'),
-                                              ),
-                                            ],
-                                          );
-                                        },
-                                      );
-                                    }
-                                  },
+                                  onTap: actions[deviceTypes[index]],
                                   child: Center(
                                     child: Column(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
                                       children: [
-                                        const Icon(Icons.devices),
+                                        Icon(deviceIcons[index]),
                                         const SizedBox(height: 6),
-                                        Text(deviceType),
+                                        Text(deviceTypes[index]),
                                       ],
                                     ),
                                   ),
@@ -232,9 +231,10 @@ class _DeviceListPageState extends State<DeviceListPage> {
                       itemBuilder: (context, index) {
                         final device = session.devices[index];
                         return Card(
+                          margin: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                           child: InkWell(
                             onTap: () {
-                              deviceCardOnClick(context, device, session);
+                              deviceCardOnClick(context, index, session);
                             },
                             child: Padding(
                                 padding:
@@ -304,9 +304,13 @@ class _DeviceListPageState extends State<DeviceListPage> {
   }
 
   Future<dynamic> deviceCardOnClick(
-      BuildContext context, Device device, SessionModel session) {
+      BuildContext context, int deviceIndex, SessionModel session) {
+    var device = session.devices[deviceIndex];
     return showModalBottomSheet(
       context: context,
+      backgroundColor:
+          Theme.of(context).canvasColor, // Set to default background color
+      isScrollControlled: true, // Allow the bottom sheet to match content size
       builder: (BuildContext context) {
         return Padding(
           padding: const EdgeInsets.all(16.0),
@@ -349,16 +353,22 @@ class _DeviceListPageState extends State<DeviceListPage> {
                     ],
                   ),
                 ),
-                ...controlPanelBuilder(context, device),
                 const SizedBox(height: 16),
-                ElevatedButton(
-                    onPressed: () => showRenameDialog(context, device),
-                    child: const Text('Rename Device')),
+                controlPanelBuilder(context, device),
                 const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () => showUnregisterDialog(context, device),
-                  child: const Text('Unregister Device'),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton(
+                        onPressed: () => showRenameDialog(context, device),
+                        child: const Text('Rename Device')),
+                    ElevatedButton(
+                      onPressed: () => showUnregisterDialog(context, device),
+                      child: const Text('Unregister Device'),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 16),
               ],
             ),
           ),
@@ -367,7 +377,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
     );
   }
 
-  List<Widget> controlPanelBuilder(BuildContext context, Device device) {
+  Widget controlPanelBuilder(BuildContext context, Device device) {
     List<Widget> controlPanel = [];
     final session = Provider.of<SessionModel>(context, listen: false);
     if (device.cmds != "") {
@@ -392,16 +402,11 @@ class _DeviceListPageState extends State<DeviceListPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        cmdParts[0].split('.')[1],
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
                       TextField(
                         controller: paramController,
                         decoration: InputDecoration(
-                          labelText: 'Enter value of ${cmdParts[1]}:',
+                          labelText:
+                              'Enter value of ${cmdParts[0].split('.')[1]}:',
                         ),
                       ),
                     ],
@@ -427,6 +432,28 @@ class _DeviceListPageState extends State<DeviceListPage> {
     if (controlPanel.isEmpty) {
       controlPanel.add(const Text('No actions available'));
     }
-    return controlPanel;
+    return _buildSection(children: controlPanel, title: 'Control Panel');
   }
+
+  Widget _buildSection(
+          {String title = '', required List<Widget> children}) =>
+      Card(
+          child: Column(
+              children: title != ''
+                  ? [
+                      const SizedBox(height: 10),
+                      _buildListSubtitle(title),
+                      ...children
+                    ]
+                  : [const SizedBox(height: 10), ...children]));
+
+  Widget _buildListSubtitle(String text) => Row(children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 0, 0),
+          child: Text(
+            text,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        )
+      ]);
 }

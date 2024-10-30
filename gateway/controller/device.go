@@ -46,11 +46,13 @@ func UnregisterDevice(db *gorm.DB, id string, conn *websocket.Conn) error {
 	}
 }
 
-func ControlDevice(db *gorm.DB, conn *websocket.Conn, deviceID, action string) error {
-	client := new(model.Client)
-	if err := db.First(client, "id = ?", deviceID).Error; err == nil {
-		return misc.RunAction(deviceID, action, db, conn)
-	} else {
-		return err
+// control device: run action by device id, get device info after action, return client info
+func ControlDevice(db *gorm.DB, conn *websocket.Conn, deviceID, action string) (*model.Client, error) {
+	client, err := new(model.Client), error(nil)
+	if err = misc.RunAction(deviceID, action, db, conn); err == nil {
+		if err = db.First(client, "id = ?", deviceID).Error; err == nil {
+			return client, nil
+		}
 	}
+	return nil, err
 }

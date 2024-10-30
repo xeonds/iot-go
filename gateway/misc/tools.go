@@ -34,9 +34,13 @@ func ConcurrentExecution(tasks []func() map[string]string) map[string]string {
 }
 
 func GinErrWrapper(c *gin.Context, err error) {
+	GinErrWrapperWithJson(c, err, gin.H{"status": "ok"})
+}
+
+func GinErrWrapperWithJson(c *gin.Context, err error, json gin.H) {
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 	} else {
-		c.JSON(200, gin.H{"status": "ok"})
+		c.JSON(200, json)
 	}
 }

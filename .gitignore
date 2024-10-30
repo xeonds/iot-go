@@ -1,4 +1,6 @@
 gateway/zeroconf
 gateway/db
 gateway/iot-go-gateway-linux-amd64
-**/config.yaml
+client/x86/client
+*/config.yaml
+*/*/config.yaml

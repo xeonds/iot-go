@@ -27,6 +27,29 @@ class Device {
   }
 }
 
+class AutomationRule {
+  final String id;
+  final String device;
+  final String condition;
+  final String action;
+
+  AutomationRule({
+    required this.id,
+    required this.device,
+    required this.condition,
+    required this.action,
+  });
+
+  factory AutomationRule.fromJson(Map<String, dynamic> json) {
+    return AutomationRule(
+      id: json['id'],
+      device: json['device'],
+      condition: json['condition'],
+      action: json['action'],
+    );
+  }
+}
+
 class SessionModel extends ChangeNotifier {
   List<Device> devices = [];
   String? gatewayIp;
@@ -97,12 +120,21 @@ class SessionModel extends ChangeNotifier {
           Uri.parse('http://$gatewayIp:$gatewayPort/api/control/$id/$action'));
       if (response.statusCode == 200) {
         print('Device $id action $action successful');
+        await Future.delayed(const Duration(milliseconds: 256));
+        final statusResponse = await http
+            .get(Uri.parse('http://$gatewayIp:$gatewayPort/api/status/$id'));
+        if (statusResponse.statusCode == 200) {
+          var data = json.decode(statusResponse.body);
+          devices.firstWhere((device) => device.id == id).status = data;
+          print('Device $id status: ${data}');
+        } else {
+          throw Exception('Failed to fetch device status');
+        }
       }
     } catch (e) {
       print('Error controlling device: $e');
     } finally {
-      await Future.delayed(const Duration(seconds: 1));
-      await fetchDevices();
+      notifyListeners();
     }
   }
 
@@ -121,8 +153,6 @@ class SessionModel extends ChangeNotifier {
     } catch (e) {
       print('Error unregistering device: $e');
     } finally {
-      await Future.delayed(const Duration(seconds: 1));
-      await fetchDevices();
       notifyListeners();
     }
   }
@@ -141,9 +171,22 @@ class SessionModel extends ChangeNotifier {
     } catch (e) {
       print('Error renaming device: $e');
     } finally {
-      await Future.delayed(const Duration(seconds: 1));
-      await fetchDevices();
       notifyListeners();
+    }
+  }
+
+  void getAutomations() async {
+    if (gatewayIp == null) return;
+    try {
+      final response = await http
+          .get(Uri.parse('http://$gatewayIp:$gatewayPort/api/automations'));
+      if (response.statusCode == 200) {
+        print('Automations: ${response.body}');
+      } else {
+        throw Exception('Failed to load automations');
+      }
+    } catch (e) {
+      print('Error fetching automations: $e');
     }
   }
 }

@@ -39,10 +39,14 @@ func main() {
 			misc.GinErrWrapper(c, err)
 		})
 		api.POST("/control/:id/:action", func(c *gin.Context) {
-			err := controller.ControlDevice(db, clientConns[c.Param("id")], c.Param("id"), c.Param("action"))
-			misc.GinErrWrapper(c, err)
+			device, err := controller.ControlDevice(db, clientConns[c.Param("id")], c.Param("id"), c.Param("action"))
+			if device != nil {
+				misc.GinErrWrapperWithJson(c, err, gin.H{"status": device.Status})
+			} else {
+				misc.GinErrWrapper(c, err)
+			}
 		})
-		api.POST("/status/:id", func(c *gin.Context) {
+		api.GET("/status/:id", func(c *gin.Context) {
 			c.JSON(200, controller.GetDeviceStatus(db, c.Param("id")))
 		})
 		api.POST("/rename/:id/:name", func(c *gin.Context) {
