@@ -23,8 +23,12 @@ plus:
 minus:
 	curl -X POST "localhost:1234/api/control/1E80B5/action:-"
 
+tomato:
+	while true; do make on; sleep 1500; make off; sleep 300; done
+
 get-status:
 	curl -X POST "localhost:1234/api/control/1E80B5/action:get_status"
 
 find-usb:
 	ls /dev|grep USB
+
