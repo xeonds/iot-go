@@ -33,6 +33,7 @@ func MonitorDeviceConnections(connections map[string]*websocket.Conn, db *gorm.D
 }
 
 // RunAction 向设备发送指令并更新数据库
+// TODO: support multi-line commands, like a;b;c;, and support commands like gateway.suspend:1500;
 func RunAction(deviceID, action string, db *gorm.DB, conn *websocket.Conn) error {
 	if conn == nil {
 		return fmt.Errorf("device %s not connected", deviceID)

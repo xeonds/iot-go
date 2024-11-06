@@ -57,6 +57,7 @@ func main() {
 			err := controller.UnregisterDevice(db, c.Param("id"), clientConns[c.Param("id")])
 			misc.GinErrWrapper(c, err)
 		})
+		// TODO: cascade gateway control
 		api.GET("/devices", func(c *gin.Context) {
 			// clients := new([]model.Client)
 			// if len(gatewayConns) > 0 {
@@ -79,6 +80,20 @@ func main() {
 			// }
 			c.JSON(200, controller.GetDevices(db))
 		})
+		// TODO: automation
+		api.POST("/rule", func(c *gin.Context) {
+			data := new(model.Rule)
+			if err := c.ShouldBindJSON(data); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			misc.GinErrWrapper(c, db.Create(data).Error)
+		})
+		api.GET("/rule", func(c *gin.Context) {
+			rules := new([]model.Rule)
+			misc.GinErrWrapper(c, db.Find(rules).Error)
+			c.JSON(200, rules)
+		})
 	}
 
 	if config.ParentGateway != "" {
@@ -89,6 +104,7 @@ func main() {
 	go handler.StartGatewayCmdHandler(db)
 	go handler.StartDeviceMessageHandler(db)
 	go misc.RunmDnsBroadcast(config)
+	go misc.RunAutomation(db, clientConns)
 	go log.Fatal(router.Run(fmt.Sprintf(":%d", config.Port)))
 	select {}
 }

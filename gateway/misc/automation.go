@@ -37,6 +37,7 @@ func (r Rules) Match(condition string) Rules {
 	return res
 }
 
+// entry point of automation
 func RunAutomation(db *gorm.DB, conns map[string]*websocket.Conn) {
 	for range time.Tick(1 * time.Minute) {
 		rules := new(Rules)
