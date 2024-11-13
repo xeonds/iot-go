@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:multicast_dns/multicast_dns.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Device {
   final String id;
@@ -24,6 +25,15 @@ class Device {
       status: json['status'],
       cmds: json['cmds'],
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'status': status,
+      'cmds': cmds,
+    };
   }
 }
 
@@ -55,9 +65,44 @@ class SessionModel extends ChangeNotifier {
   String? gatewayIp;
   bool isLoading = false;
   int? gatewayPort;
+  SharedPreferences prefs;
 
-  SessionModel() {
-    discoverGateway();
+  SessionModel(this.prefs) {
+    loadConfig();
+    if (gatewayIp != null && gatewayPort != null) {
+      fetchDevices();
+    } else {
+      discoverGateway();
+    }
+  }
+
+  void loadConfig() {
+    gatewayIp = prefs.getString('gatewayIp');
+    gatewayPort = prefs.getInt('gatewayPort');
+    String? devicesJson = prefs.getString('devices');
+    if (devicesJson != null) {
+      List<dynamic> deviceList = json.decode(devicesJson);
+      devices = deviceList.map((json) => Device.fromJson(json)).toList();
+    }
+    notifyListeners();
+  }
+
+  void saveConfig() async {
+    if (gatewayIp != null) {
+      await prefs.setString('gatewayIp', gatewayIp!);
+    }
+    if (gatewayPort != null) {
+      await prefs.setInt('gatewayPort', gatewayPort!);
+    }
+    String devicesJson =
+        json.encode(devices.map((device) => device.toJson()).toList());
+    await prefs.setString('devices', devicesJson);
+  }
+
+  @override
+  void notifyListeners() {
+    super.notifyListeners();
+    saveConfig();
   }
 
   // 发现网关

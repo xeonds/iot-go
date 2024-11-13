@@ -4,10 +4,12 @@ import 'package:app/automation_page.dart';
 import 'package:app/device_list_page.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
+void main() async {
+  final prefs = await SharedPreferences.getInstance();
   runApp(ChangeNotifierProvider(
-    create: (context) => SessionModel(),
+    create: (context) => SessionModel(prefs),
     child: const MyApp(),
   ));
 }

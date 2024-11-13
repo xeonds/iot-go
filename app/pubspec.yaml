@@ -17,6 +17,7 @@ dependencies:
   wifi_scan: ^0.4.1+1
   provider: ^6.0.1
   flutter_expandable_fab: ^2.3.0
+  shared_preferences: ^2.3.3
 
 dev_dependencies:
   flutter_test:
