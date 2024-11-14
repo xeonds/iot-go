@@ -31,7 +31,7 @@ func RunmDnsBroadcast(config *config.Config) {
 }
 
 // change to receive gateway api messages
-func ForwardTaskToSubGateways(deviceID string, action string, conns []*websocket.Conn) (map[string]string, error) {
+func ForwardTaskToSubGateways(deviceID string, action string, conns map[string]*websocket.Conn) (map[string]string, error) {
 	type SubGatewayResponse struct {
 		GatewayID string
 		Result    string

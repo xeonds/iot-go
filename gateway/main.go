@@ -43,7 +43,10 @@ func main() {
 			if device != nil {
 				misc.GinErrWrapperWithJson(c, err, gin.H{"status": device.Status})
 			} else {
-				misc.GinErrWrapper(c, err)
+				res, err := misc.ForwardTaskToSubGateways(c.Param("id"), c.Param("action"), gatewayConns)
+				misc.GinErrWrapperWithJson(c, err, gin.H{
+					"status": res,
+				})
 			}
 		})
 		api.GET("/status/:id", func(c *gin.Context) {
@@ -101,7 +104,7 @@ func main() {
 	}
 
 	go misc.MonitorDeviceConnections(clientConns, db, config.Heartbeat)
-	go handler.StartGatewayCmdHandler(db)
+	go handler.StartGatewayCmdHandler(db, clientConns)
 	go handler.StartDeviceMessageHandler(db)
 	go misc.RunmDnsBroadcast(config)
 	go misc.RunAutomation(db, clientConns)

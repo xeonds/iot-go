@@ -3,7 +3,6 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"gateway/controller"
 	"gateway/misc"
 	"gateway/model"
 	"log"
@@ -96,31 +95,19 @@ func DeviceWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.H
 }
 
 var parentGatewayCmdChannel = make(chan struct {
-	Conn    *websocket.Conn
-	Message string
+	Conn     *websocket.Conn
+	DeviceId string
+	Action   string
 }, 100)
 
 // TODO: implement handle gateway api messages
-func handleGatewayCmds(db *gorm.DB) {
+func handleGatewayCmds(db *gorm.DB, clientConns map[string]*websocket.Conn) {
 	for m := range parentGatewayCmdChannel {
-		msg, err := misc.ParseDSL(string(m.Message))
+		err := misc.RunAction(m.DeviceId, m.Action, db, clientConns[m.DeviceId])
 		if err != nil {
-			log.Printf("解析 DSL 错误: %v", err)
-			continue
-		}
-		switch msg.Type {
-		case "devices":
-			res := controller.GetDevices(db)
-			response, err := json.Marshal(res)
-			if err != nil {
-				log.Printf("序列化设备列表错误: %v", err)
-				continue
-			}
-			err = m.Conn.WriteMessage(websocket.TextMessage, response)
-			if err != nil {
-				log.Printf("发送设备列表错误: %v", err)
-				continue
-			}
+			m.Conn.WriteJSON(map[string]string{"error": err.Error()})
+		} else {
+			m.Conn.WriteJSON(map[string]string{"status": "ok"})
 		}
 	}
 }
@@ -133,20 +120,25 @@ func RegisterToParentGateway(parentGateway string) error {
 	defer conn.Close()
 	for {
 		_, message, err := conn.ReadMessage()
+		var msgData map[string]string
+		err = json.Unmarshal(message, &msgData)
 		if err != nil {
-			log.Printf("读取父网关消息失败: %v", err)
+			log.Printf("解析父网关消息失败: %v", err)
 			continue
 		}
+		deviceID := msgData["device_id"]
+		action := msgData["action"]
 		log.Printf("收到父网关消息: %s", message)
 		parentGatewayCmdChannel <- struct {
-			Conn    *websocket.Conn
-			Message string
-		}{Conn: conn, Message: string(message)}
+			Conn     *websocket.Conn
+			DeviceId string
+			Action   string
+		}{Conn: conn, DeviceId: deviceID, Action: action}
 	}
 }
 
-func StartGatewayCmdHandler(db *gorm.DB) {
-	go handleGatewayCmds(db)
+func StartGatewayCmdHandler(db *gorm.DB, conns map[string]*websocket.Conn) {
+	go handleGatewayCmds(db, conns)
 }
 
 func GatewayWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.HandlerFunc {
@@ -171,10 +163,9 @@ func GatewayWebSocketHandler(db *gorm.DB, conns map[string]*websocket.Conn) gin.
 			_, message, err := conn.ReadMessage()
 			if err != nil {
 				log.Println("子网关连接断开或读取消息失败:", err)
-				break
+				continue
 			}
 			log.Printf("收到子网关消息: %s", message)
 		}
-		conns[id] = nil
 	}
 }
