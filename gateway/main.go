@@ -9,6 +9,7 @@ import (
 	"gateway/model"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -86,7 +87,10 @@ func main() {
 		// TODO: automation
 		api.GET("/rules", func(c *gin.Context) {
 			rules := new([]model.Rule)
-			misc.GinErrWrapper(c, db.Find(rules).Error)
+			if err := db.Find(rules).Error; err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
 			c.JSON(200, rules)
 		})
 		api.POST("/rules", func(c *gin.Context) {
@@ -99,29 +103,54 @@ func main() {
 		})
 		api.POST("/rules/:id", func(c *gin.Context) {
 			data := new(model.Rule)
+			if err := db.First(data, c.Param("id")).Error; err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Rule not found"})
+				return
+			}
 			if err := c.ShouldBindJSON(data); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			if err := db.First(data, c.Param("id")).Error; err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
 				return
 			}
-			misc.GinErrWrapper(c, db.Save(data).Error)
+			data.ID = uint(id)
+			db.Save(data)
 		})
-		// manual run rule
-		api.GET("/run/:id", func(c *gin.Context) {
+		api.DELETE("/rules/:id", func(c *gin.Context) {
 			rule := new(model.Rule)
 			if err := db.First(rule, c.Param("id")).Error; err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			for _, task := range *rule.Tasks {
-				if err := misc.RunActions(task.DeviceID, task.Commands, db, clientConns[task.DeviceID]); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			misc.GinErrWrapper(c, db.Delete(rule).Error)
+		})
+		// manual run rule
+		api.POST("/run/:id", func(c *gin.Context) {
+			go func() {
+				rule := new(model.Rule)
+				if err := db.First(rule, c.Param("id")).Error; err != nil {
+					log.Println(err)
 					return
 				}
-			}
+				for _, task := range *rule.Tasks {
+					misc.RunActions(task.DeviceID, task.Commands, db, clientConns[task.DeviceID])
+				}
+				for {
+					if err := db.First(rule, c.Param("id")).Error; err != nil {
+						log.Println(err)
+						return
+					}
+					if !rule.IsEnabled {
+						break
+					}
+					for _, task := range *rule.Tasks {
+						misc.RunActions(task.DeviceID, task.Commands, db, clientConns[task.DeviceID])
+					}
+				}
+			}()
 			c.JSON(200, gin.H{"status": "ok"})
 		})
 	}

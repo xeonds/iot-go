@@ -38,7 +38,7 @@ IotLang? parseExpression(String expr) {
 }
 
 class Device {
-  final String id;
+  String id;
   String name;
   String status;
   String cmds;
@@ -70,43 +70,115 @@ class Device {
 }
 
 class Rule {
-  final List<Task> tasks;
-  final bool isManual;
-  final DateTime? dateTime;
-  final String repeat;
-  final List<Condition> conditions;
+  String name;
+  String description;
+  List<Task> tasks;
+  bool isManual;
+  DateTime? dateTime;
+  String repeat;
+  List<Condition> conditions;
   bool isEnabled;
+  String id;
 
   Rule({
+    required this.name,
+    required this.description,
     required this.tasks,
     required this.isManual,
     this.dateTime,
+    this.id = '',
     required this.repeat,
     required this.conditions,
     required this.isEnabled,
+    required selectedDateTime,
+    required String selectedRepeat,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'description': description,
+      'tasks': tasks.map((task) => task.toJson()).toList(),
+      'is_manual': isManual,
+      'date_time': dateTime?.toIso8601String(),
+      'repeat': repeat,
+      'conditions': conditions.map((condition) => condition.toJson()).toList(),
+      'is_enabled': isEnabled,
+    };
+  }
+
+  factory Rule.fromJson(Map<String, dynamic> json) {
+    return Rule(
+      id: json['ID'].toString(),
+      name: json['name'],
+      description: json['description'],
+      tasks: (json['tasks'] as List<dynamic>)
+          .map((item) => Task.fromJson(item))
+          .toList(),
+      isManual: json['is_manual'],
+      dateTime:
+          json['date_time'] != null ? DateTime.parse(json['date_time']) : null,
+      repeat: json['repeat'] ?? '',
+      conditions: (json['conditions'] as List<dynamic>)
+          .map((item) => Condition.fromJson(item))
+          .toList(),
+      isEnabled: json['is_enabled'],
+      selectedDateTime: null,
+      selectedRepeat: '',
+    );
+  }
 }
 
 class Condition {
-  final String item;
-  final String comparator;
-  final String value;
+  String item;
+  String comparator;
+  String value;
 
   Condition({
     required this.item,
     required this.comparator,
     required this.value,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'item': item,
+      'comparator': comparator,
+      'value': value,
+    };
+  }
+
+  factory Condition.fromJson(Map<String, dynamic> json) {
+    return Condition(
+      item: json['item'],
+      comparator: json['comparator'],
+      value: json['value'],
+    );
+  }
 }
 
 class Task {
-  final String id;
-  final List<String> commands;
+  String deviceID;
+  List<String> commands;
 
   Task({
-    required this.id,
+    required this.deviceID,
     required this.commands,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'device_id': deviceID,
+      'commands': commands,
+    };
+  }
+
+  factory Task.fromJson(Map<String, dynamic> json) {
+    return Task(
+      deviceID: json['device_id'],
+      commands: List<String>.from(json['commands']),
+    );
+  }
 }
 
 class SessionModel extends ChangeNotifier {
@@ -135,6 +207,11 @@ class SessionModel extends ChangeNotifier {
       List<dynamic> deviceList = json.decode(devicesJson);
       devices = deviceList.map((json) => Device.fromJson(json)).toList();
     }
+    String? rulesJson = prefs.getString('rules');
+    if (rulesJson != null) {
+      List<dynamic> ruleList = json.decode(rulesJson);
+      rules = ruleList.map((json) => Rule.fromJson(json)).toList();
+    }
     notifyListeners();
   }
 
@@ -148,6 +225,8 @@ class SessionModel extends ChangeNotifier {
     String devicesJson =
         json.encode(devices.map((device) => device.toJson()).toList());
     await prefs.setString('devices', devicesJson);
+    String rulesJson = json.encode(rules.map((rule) => rule.toJson()).toList());
+    await prefs.setString('rules', rulesJson);
   }
 
   @override
@@ -283,34 +362,34 @@ class SessionModel extends ChangeNotifier {
           await http.get(Uri.parse('http://$gatewayIp:$gatewayPort/api/rules'));
       if (response.statusCode == 200) {
         List<dynamic> rulesJson = json.decode(response.body);
-        rules = rulesJson
-            .map((json) => Rule(
-                  tasks: (json['commands'] as List<dynamic>)
-                      .map((json) => Task(
-                            id: json['id'],
-                            commands: json['commands'],
-                          ))
-                      .toList(),
-                  isManual: json['isManual'],
-                  dateTime: json['dateTime'] != null
-                      ? DateTime.parse(json['dateTime'])
-                      : null,
-                  repeat: json['repeat'],
-                  conditions: (json['conditions'] as List<dynamic>)
-                      .map((json) => Condition(
-                            item: json['item'],
-                            comparator: json['comparator'],
-                            value: json['value'],
-                          ))
-                      .toList(),
-                  isEnabled: json['isEnabled'],
-                ))
-            .toList();
+        rules = rulesJson.map((json) => Rule.fromJson(json)).toList();
       } else {
         throw Exception('Failed to load automations');
       }
     } catch (e) {
       print('Error fetching automations: $e');
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> createRule(Rule rule) async {
+    if (gatewayIp == null) return;
+    try {
+      final response = await http.post(
+        Uri.parse('http://$gatewayIp:$gatewayPort/api/rules'),
+        body: json.encode(rule.toJson()),
+        headers: {'Content-Type': 'application/json'},
+      );
+      if (response.statusCode == 200) {
+        print('Rule created successfully');
+      } else {
+        throw Exception('Failed to create rule');
+      }
+    } catch (e) {
+      print('Error creating rule: $e');
+    } finally {
+      notifyListeners();
     }
   }
 
@@ -318,29 +397,9 @@ class SessionModel extends ChangeNotifier {
     if (gatewayIp == null) return;
     try {
       final response = await http.post(
-        Uri.parse('http://$gatewayIp:$gatewayPort/api/rules'),
-        headers: <String, String>{
-          'Content-Type': 'application/json; charset=UTF-8',
-        },
-        body: json.encode({
-          'tasks': rule.tasks
-              .map((task) => {
-                    'id': task.id,
-                    'commands': task.commands,
-                  })
-              .toList(),
-          'isManual': rule.isManual,
-          'dateTime': rule.dateTime?.toIso8601String(),
-          'repeat': rule.repeat,
-          'conditions': rule.conditions
-              .map((condition) => {
-                    'item': condition.item,
-                    'comparator': condition.comparator,
-                    'value': condition.value,
-                  })
-              .toList(),
-          'isEnabled': rule.isEnabled,
-        }),
+        Uri.parse('http://$gatewayIp:$gatewayPort/api/rules/${rule.id}'),
+        body: json.encode(rule.toJson()),
+        headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200) {
         print('Rule updated successfully');
@@ -349,6 +408,45 @@ class SessionModel extends ChangeNotifier {
       }
     } catch (e) {
       print('Error updating rule: $e');
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> runRule(String id) async {
+    if (gatewayIp == null) return;
+    try {
+      final response = await http.post(
+        Uri.parse('http://$gatewayIp:$gatewayPort/api/run/$id'),
+      );
+      if (response.statusCode == 200) {
+        print('Rule $id run successfully');
+      } else {
+        throw Exception('Failed to run rule');
+      }
+    } catch (e) {
+      print('Error running rule: $e');
+    } finally {
+      notifyListeners();
+    }
+  }
+
+  Future<void> deleteRule(String id) async {
+    if (gatewayIp == null) return;
+    try {
+      final response = await http.delete(
+        Uri.parse('http://$gatewayIp:$gatewayPort/api/rules/$id'),
+      );
+      if (response.statusCode == 200) {
+        print('Rule $id deleted successfully');
+        rules.removeWhere((rule) => rule.id == id);
+      } else {
+        throw Exception('Failed to delete rule');
+      }
+    } catch (e) {
+      print('Error deleting rule: $e');
+    } finally {
+      notifyListeners();
     }
   }
 }

@@ -398,7 +398,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
               Flexible(
                 child: Padding(
                   padding: const EdgeInsets.all(4.0),
-                  child: FilledButton(
+                  child: ElevatedButton(
                     onPressed: () {
                       session.controlDevice(device.id, cmd.split('->')[0]);
                     },
@@ -427,7 +427,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                     ),
                   ),
                 ),
-                FilledButton(
+                ElevatedButton(
                   onPressed: () {
                     final paramValue = paramController.text;
                     final fullAction = '${cmdParts[0]}:$paramValue';

@@ -3,22 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_expandable_fab/flutter_expandable_fab.dart';
 import 'package:provider/provider.dart';
 
-class DeviceCardData {
-  final String title;
-  final String description;
-  final int cmdCount;
-  final List<String> devices;
-  bool isActive;
-
-  DeviceCardData({
-    required this.title,
-    required this.description,
-    required this.cmdCount,
-    required this.devices,
-    required this.isActive,
-  });
-}
-
 class AutomationPage extends StatefulWidget {
   const AutomationPage({super.key});
 
@@ -27,24 +11,8 @@ class AutomationPage extends StatefulWidget {
 }
 
 class _AutomationPageState extends State<AutomationPage> {
-  final List<DeviceCardData> _deviceCards = [
-    DeviceCardData(
-      title: 'Automation 1',
-      description: 'Description 1',
-      cmdCount: 5,
-      devices: ['Device 1', 'Device 2', 'Device 3'],
-      isActive: true,
-    ),
-    DeviceCardData(
-      title: 'Automation 2',
-      description: 'Description 2',
-      cmdCount: 3,
-      devices: ['Device 4', 'Device 5'],
-      isActive: false,
-    ),
-  ];
-
-  Widget _buildDeviceCard(BuildContext context, DeviceCardData data) {
+  Widget _buildDeviceCard(BuildContext context, Rule data) {
+    final session = Provider.of<SessionModel>(context, listen: true);
     return Card(
       margin: const EdgeInsets.all(8.0),
       child: InkWell(
@@ -52,8 +20,7 @@ class _AutomationPageState extends State<AutomationPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => AutomationDetailPage(),
-            ),
+                builder: (context) => AutomationDetailPage(rule: data)),
           );
         },
         onLongPress: () {
@@ -66,7 +33,7 @@ class _AutomationPageState extends State<AutomationPage> {
                     leading: const Icon(Icons.play_arrow),
                     title: const Text('Run'),
                     onTap: () {
-                      // Handle run action
+                      session.runRule(data.id);
                       Navigator.pop(context);
                     },
                   ),
@@ -74,7 +41,7 @@ class _AutomationPageState extends State<AutomationPage> {
                     leading: const Icon(Icons.delete),
                     title: const Text('Delete'),
                     onTap: () {
-                      // Handle delete action
+                      session.deleteRule(data.id);
                       Navigator.pop(context);
                     },
                   ),
@@ -92,20 +59,20 @@ class _AutomationPageState extends State<AutomationPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      data.title,
+                      data.name,
                       style: const TextStyle(
                           fontSize: 18, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     Text(data.description),
                     const SizedBox(height: 8),
-                    Text('Cmd Counts: ${data.cmdCount}'),
+                    Text('Tasks Counts: ${data.tasks.length}'),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8.0,
-                      children: data.devices.map((device) {
+                      children: data.tasks.map((device) {
                         return Chip(
-                          label: Text(device),
+                          label: Text(device.deviceID),
                         );
                       }).toList(),
                     ),
@@ -113,10 +80,11 @@ class _AutomationPageState extends State<AutomationPage> {
                 ),
               ),
               Switch(
-                value: data.isActive,
+                value: data.isEnabled,
                 onChanged: (bool value) {
-                  setState(() {
-                    data.isActive = value;
+                  setState(() async {
+                    data.isEnabled = value;
+                    await session.updateRule(data);
                   });
                 },
               ),
@@ -134,14 +102,16 @@ class _AutomationPageState extends State<AutomationPage> {
       appBar: AppBar(
         title: const Text('Compose Automation Rule'),
       ),
-      body: RefreshIndicator(
-        onRefresh: session.fetchRules,
-        child: ListView(
-          children: _deviceCards
-              .map((data) => _buildDeviceCard(context, data))
-              .toList(),
-        ),
-      ),
+      body: session.rules.isEmpty
+          ? const Center(child: Text("No automation rules found."))
+          : RefreshIndicator(
+              onRefresh: session.fetchRules,
+              child: ListView(
+                children: session.rules
+                    .map((data) => _buildDeviceCard(context, data))
+                    .toList(),
+              ),
+            ),
       floatingActionButtonLocation: ExpandableFab.location,
       floatingActionButton: ExpandableFab(
         type: ExpandableFabType.up,
@@ -187,7 +157,14 @@ class _AutomationPageState extends State<AutomationPage> {
               FloatingActionButton.small(
                 heroTag: null,
                 child: const Icon(Icons.create),
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AutomationDetailPage(),
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -198,39 +175,52 @@ class _AutomationPageState extends State<AutomationPage> {
 }
 
 class AutomationDetailPage extends StatefulWidget {
-  const AutomationDetailPage({super.key});
+  final Rule? rule;
+
+  const AutomationDetailPage({super.key, this.rule});
 
   @override
   State<AutomationDetailPage> createState() => _AutomationDetailPageState();
 }
 
 class _AutomationDetailPageState extends State<AutomationDetailPage> {
-  bool isManual = true;
-  bool conditionsEnabled = false;
-  List<Map<String, dynamic>> conditions = [];
+  Rule rule = Rule(
+    name: 'New Rule',
+    description: '',
+    tasks: [],
+    isEnabled: false,
+    isManual: true,
+    conditions: [],
+    selectedDateTime: null,
+    selectedRepeat: 'no',
+    repeat: '',
+  );
 
-  var _selectedDateTime;
-
-  String _selectedRepeat = 'no';
+  @override
+  void initState() {
+    super.initState();
+    if (widget.rule != null) {
+      rule = widget.rule!;
+    }
+  }
 
   void _addCondition() {
+    final id =
+        Provider.of<SessionModel>(context, listen: false).devices.first.id;
     setState(() {
-      conditions.add({
-        'item': 'Item 1',
-        'comparator': 'greater',
-        'value': '',
-      });
+      rule.conditions.add(Condition(item: id, comparator: ">", value: "1"));
     });
   }
 
   void _removeCondition(int index) {
     setState(() {
-      conditions.removeAt(index);
+      rule.conditions.removeAt(index);
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final session = Provider.of<SessionModel>(context, listen: true);
     return Scaffold(
       appBar: AppBar(
         title: const Text('Automation Detail'),
@@ -238,14 +228,38 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
       body: ListView(
         padding: const EdgeInsets.all(16.0),
         children: [
+          TextField(
+            decoration: const InputDecoration(
+              labelText: 'Rule Name',
+            ),
+            controller: TextEditingController(text: rule.name),
+            onChanged: (String newValue) {
+              setState(() {
+                rule.name = newValue;
+              });
+            },
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            decoration: const InputDecoration(
+              labelText: 'Rule Description',
+            ),
+            controller: TextEditingController(text: rule.description),
+            onChanged: (String newValue) {
+              setState(() {
+                rule.description = newValue;
+              });
+            },
+          ),
+          const SizedBox(height: 16),
           const ListTile(
             title: Text('Commands for Devices'),
           ),
-          for (int i = 0; i < conditions.length; i++)
+          for (int i = 0; i < rule.tasks.length; i++)
             Dismissible(
-              key: Key(conditions[i].toString()),
+              key: Key(rule.tasks[i].toString()),
               onDismissed: (direction) {
-                _removeCondition(i);
+                _removeDevice(i);
               },
               background: Container(color: Colors.red),
               child: ListTile(
@@ -259,38 +273,39 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
                               labelText: 'Commands',
                             ),
                             maxLines: null,
+                            controller: TextEditingController(
+                                text: rule.tasks[i].commands.join('\n')),
                             onChanged: (String newValue) {
                               setState(() {
-                                conditions[i]['commands'] = newValue;
+                                rule.tasks[i].commands = newValue.split('\n');
                               });
                             },
                           ),
                         ),
                         const SizedBox(width: 8),
                         DropdownButton<String>(
-                          value: conditions[i]['deviceID'],
+                          value: rule.tasks[i].deviceID == ''
+                              ? session.devices.first.id
+                              : rule.tasks[i].deviceID,
                           hint: const Text('Select Device'),
-                          items: <String>['Device 1', 'Device 2', 'Device 3']
-                              .map((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value),
-                            );
-                          }).toList(),
+                          items: session.devices
+                              .map((device) => DropdownMenuItem<String>(
+                                    value: device.id,
+                                    child: Text(device.id),
+                                  ))
+                              .toList(),
                           onChanged: (String? newValue) {
                             setState(() {
-                              conditions[i]['deviceID'] = newValue!;
+                              rule.tasks[i].deviceID = newValue!;
                             });
                           },
                         ),
                       ],
                     ),
-                    if (conditions[i]['deviceID'] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Text(
-                            'Selected Device: ${conditions[i]['deviceID']}'),
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Text('Selected Device: ${rule.tasks[i].deviceID}'),
+                    ),
                   ],
                 ),
               ),
@@ -298,7 +313,7 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: ElevatedButton(
-              onPressed: _addCondition,
+              onPressed: _addDeviceCommand,
               child: const Text('Add Device Command'),
             ),
           ),
@@ -307,6 +322,7 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
             title: const Text('Mode'),
             subtitle: const Text('Run manually, or on a schedule.'),
             trailing: SegmentedButton<bool>(
+              showSelectedIcon: false,
               segments: const [
                 ButtonSegment(
                   value: true,
@@ -317,22 +333,21 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
                   label: Text('Routinely'),
                 ),
               ],
-              selected: {isManual},
+              selected: {rule.isManual},
               onSelectionChanged: (Set<bool> newSelection) {
                 setState(() {
-                  isManual = newSelection.first;
+                  rule.isManual = newSelection.first;
                 });
               },
             ),
           ),
-          if (!isManual) ...[
+          if (!rule.isManual) ...[
             const ListTile(
               title: Text('Routine Setup'),
             ),
             ListTile(
-              title: Text(_selectedDateTime != null
-                  ? _selectedDateTime.toString()
-                  : ''),
+              title:
+                  Text(rule.dateTime != null ? rule.dateTime.toString() : ''),
               trailing: ElevatedButton(
                 onPressed: () async {
                   final DateTime? pickedDate = await showDatePicker(
@@ -354,7 +369,9 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
                         pickedTime.hour,
                         pickedTime.minute,
                       );
-                      _selectedDateTime = pickedDateTime;
+                      setState(() {
+                        rule.dateTime = pickedDateTime;
+                      });
                     }
                   }
                 },
@@ -363,6 +380,7 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
             ),
             const SizedBox(height: 16),
             SegmentedButton<String>(
+              showSelectedIcon: false,
               segments: const [
                 ButtonSegment(
                   value: 'no',
@@ -385,10 +403,10 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
                   label: Text('Yearly'),
                 ),
               ],
-              selected: {_selectedRepeat},
+              selected: {rule.repeat},
               onSelectionChanged: (Set<String> newSelection) {
                 setState(() {
-                  _selectedRepeat = newSelection.first;
+                  rule.repeat = newSelection.first;
                 });
               },
             ),
@@ -397,9 +415,9 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
           const ListTile(
             title: Text('Conditions'),
           ),
-          for (int i = 0; i < conditions.length; i++)
+          for (int i = 0; i < rule.conditions.length; i++)
             Dismissible(
-              key: Key(conditions[i].toString()),
+              key: Key(rule.conditions[i].toString()),
               onDismissed: (direction) {
                 _removeCondition(i);
               },
@@ -409,35 +427,45 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
                   children: [
                     Expanded(
                       child: DropdownButton<String>(
-                        value: conditions[i]['item'],
-                        items: <String>['Item 1', 'Item 2', 'Item 3']
-                            .map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
+                        value: rule.conditions[i].item == ''
+                            ? session.devices.first.id
+                            : rule.conditions[i].item,
+                        hint: const Text('Select Item'),
+                        items: session.devices
+                            .map((device) => DropdownMenuItem<String>(
+                                  value: device.id,
+                                  child: Text(device.id),
+                                ))
+                            .toList(),
                         onChanged: (String? newValue) {
                           setState(() {
-                            conditions[i]['item'] = newValue!;
+                            rule.conditions[i].item = newValue!;
                           });
                         },
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: DropdownButton<String>(
-                        value: conditions[i]['comparator'],
-                        items: <String>['greater', 'less', 'exactly']
-                            .map((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
-                        onChanged: (String? newValue) {
+                      child: SegmentedButton<String>(
+                        showSelectedIcon: false,
+                        segments: const [
+                          ButtonSegment(
+                            value: 'greater',
+                            label: Text('>'),
+                          ),
+                          ButtonSegment(
+                            value: 'exactly',
+                            label: Text('='),
+                          ),
+                          ButtonSegment(
+                            value: 'less',
+                            label: Text('<'),
+                          ),
+                        ],
+                        selected: {rule.conditions[i].comparator},
+                        onSelectionChanged: (Set<String> newSelection) {
                           setState(() {
-                            conditions[i]['comparator'] = newValue!;
+                            rule.conditions[i].comparator = newSelection.first;
                           });
                         },
                       ),
@@ -448,9 +476,11 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
                         decoration: const InputDecoration(
                           labelText: 'Value',
                         ),
+                        controller: TextEditingController(
+                            text: rule.conditions[i].value),
                         onChanged: (String newValue) {
                           setState(() {
-                            conditions[i]['value'] = newValue;
+                            rule.conditions[i].value = newValue;
                           });
                         },
                       ),
@@ -469,11 +499,30 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Handle save action
+        onPressed: () async {
+          if (widget.rule == null) {
+            await session.createRule(rule);
+          } else {
+            await session.updateRule(rule);
+          }
+          Navigator.pop(context);
         },
         child: const Icon(Icons.save),
       ),
     );
+  }
+
+  void _addDeviceCommand() {
+    final id =
+        Provider.of<SessionModel>(context, listen: false).devices.first.id;
+    setState(() {
+      rule.tasks.add(Task(deviceID: id, commands: []));
+    });
+  }
+
+  void _removeDevice(int index) {
+    setState(() {
+      rule.tasks.removeAt(index);
+    });
   }
 }
