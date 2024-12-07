@@ -222,9 +222,9 @@ class _DeviceListPageState extends State<DeviceListPage> {
                   ),
                   Expanded(
                     child: GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount:
+                            MediaQuery.of(context).size.width > 600 ? 4 : 2,
                         childAspectRatio: 4 / 2,
                       ),
                       itemCount: session.devices.length,
@@ -252,10 +252,15 @@ class _DeviceListPageState extends State<DeviceListPage> {
                                             icon: const Icon(
                                                 Icons.power_settings_new),
                                             color: device.status == "-1"
-                                                ? Colors.grey
+                                                ? Theme.of(context)
+                                                    .disabledColor
                                                 : device.status == "0"
-                                                    ? Colors.black
-                                                    : Colors.green,
+                                                    ? Theme.of(context)
+                                                        .colorScheme
+                                                        .onSurface
+                                                    : Theme.of(context)
+                                                        .colorScheme
+                                                        .primary,
                                             onPressed: device.status == "-1"
                                                 ? null
                                                 : () {
@@ -382,37 +387,47 @@ class _DeviceListPageState extends State<DeviceListPage> {
     final session = Provider.of<SessionModel>(context, listen: false);
     if (device.cmds != "") {
       final cmds = device.cmds.split(';');
+      List<Widget> buttonRow = [];
       for (var cmd in cmds) {
         if (cmd != "") {
           final cmdParts = cmd.split('->')[0].split(':');
           if (cmdParts[1] == 'reset') continue;
 
           if (cmdParts[0].split('.').length == 1) {
-            controlPanel.add(TextButton(
-              onPressed: () {
-                session.controlDevice(device.id, cmd.split('->')[0]);
-              },
-              child: Text(cmdParts[1]),
-            ));
+            buttonRow.add(
+              Flexible(
+                child: Padding(
+                  padding: const EdgeInsets.all(4.0),
+                  child: FilledButton(
+                    onPressed: () {
+                      session.controlDevice(device.id, cmd.split('->')[0]);
+                    },
+                    child: Text(cmdParts[1]),
+                  ),
+                ),
+              ),
+            );
           } else {
+            if (buttonRow.isNotEmpty) {
+              controlPanel.add(Wrap(
+                alignment: WrapAlignment.start,
+                children: buttonRow,
+              ));
+              controlPanel.add(const SizedBox(height: 8));
+              buttonRow = [];
+            }
             TextEditingController paramController = TextEditingController();
             controlPanel.add(Row(
               children: [
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TextField(
-                        controller: paramController,
-                        decoration: InputDecoration(
-                          labelText:
-                              'Enter value of ${cmdParts[0].split('.')[1]}:',
-                        ),
-                      ),
-                    ],
+                  child: TextField(
+                    controller: paramController,
+                    decoration: InputDecoration(
+                      labelText: 'Enter value of ${cmdParts[0].split('.')[1]}:',
+                    ),
                   ),
                 ),
-                TextButton(
+                FilledButton(
                   onPressed: () {
                     final paramValue = paramController.text;
                     final fullAction = '${cmdParts[0]}:$paramValue';
@@ -423,10 +438,16 @@ class _DeviceListPageState extends State<DeviceListPage> {
                 ),
               ],
             ));
+            controlPanel.add(const SizedBox(height: 8));
           }
-
-          controlPanel.add(const SizedBox(height: 8));
         }
+      }
+      if (buttonRow.isNotEmpty) {
+        controlPanel.add(Wrap(
+          alignment: WrapAlignment.start,
+          children: buttonRow,
+        ));
+        controlPanel.add(const SizedBox(height: 8));
       }
     }
     if (controlPanel.isEmpty) {

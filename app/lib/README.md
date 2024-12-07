@@ -2,6 +2,10 @@
 
 This is the automation center for iot system. It can create, edit, delete, enable, disable, view, and run automation rules.
 
+> create a new page: when click each item in automation page, it contains : a textarea editor for multi-line commands editing, a radio group with <maual, routinely> {if manual select, display "run" button, else if routinely, display a y-m-d h-m-s slector and a weekly repeat option selector}, and a contition section, containing a main switch for enable/disable conditions, and list of conditions , each condition including [when <selector:item> is <selector:greeter/less/exactly> <value input> <left swipe to display remove button>], and an add button for adding new conditions.
+>
+> the page contains a fab for save these items
+
 ## automation rule
 
 The rules are written in IoTLang, a domain-specific language for IoT automation. The rules are executed by the gateway's dsl engine.

@@ -19,7 +19,7 @@ import (
 func main() {
 	config := libgc.LoadConfig[config.Config]()
 	db := libgc.NewDB(&config.DB, func(db *gorm.DB) error {
-		return db.AutoMigrate(&model.Client{}, &model.Rule{}, &model.Data{})
+		return db.AutoMigrate(&model.Client{}, &model.Rule{}, &model.Condition{}, &model.Tasks{}, &model.Data{})
 	})
 	gatewayConns, clientConns := make(map[string]*websocket.Conn), make(map[string]*websocket.Conn)
 	router := gin.Default()
@@ -84,7 +84,12 @@ func main() {
 			c.JSON(200, controller.GetDevices(db))
 		})
 		// TODO: automation
-		api.POST("/rule", func(c *gin.Context) {
+		api.GET("/rules", func(c *gin.Context) {
+			rules := new([]model.Rule)
+			misc.GinErrWrapper(c, db.Find(rules).Error)
+			c.JSON(200, rules)
+		})
+		api.POST("/rules", func(c *gin.Context) {
 			data := new(model.Rule)
 			if err := c.ShouldBindJSON(data); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -92,10 +97,32 @@ func main() {
 			}
 			misc.GinErrWrapper(c, db.Create(data).Error)
 		})
-		api.GET("/rule", func(c *gin.Context) {
-			rules := new([]model.Rule)
-			misc.GinErrWrapper(c, db.Find(rules).Error)
-			c.JSON(200, rules)
+		api.POST("/rules/:id", func(c *gin.Context) {
+			data := new(model.Rule)
+			if err := c.ShouldBindJSON(data); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := db.First(data, c.Param("id")).Error; err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			misc.GinErrWrapper(c, db.Save(data).Error)
+		})
+		// manual run rule
+		api.GET("/run/:id", func(c *gin.Context) {
+			rule := new(model.Rule)
+			if err := db.First(rule, c.Param("id")).Error; err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			for _, task := range *rule.Tasks {
+				if err := misc.RunActions(task.DeviceID, task.Commands, db, clientConns[task.DeviceID]); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+			}
+			c.JSON(200, gin.H{"status": "ok"})
 		})
 	}
 

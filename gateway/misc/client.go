@@ -50,3 +50,24 @@ func RunAction(deviceID, action string, db *gorm.DB, conn *websocket.Conn) error
 	}
 	return nil
 }
+
+func RunActions(deviceID string, actions []string, db *gorm.DB, conn *websocket.Conn) error {
+	for _, action := range actions {
+		if parsed, err := ParseDSL(action); err != nil {
+			return err
+		} else {
+			if parsed.Type == "gateway" {
+				switch parsed.Key {
+				case "suspend":
+					time.Sleep(time.Duration(parsed.Limit) * time.Second)
+					continue
+				}
+			} else {
+				if err := RunAction(deviceID, action, db, conn); err != nil {
+					return err
+				}
+			}
+		}
+	}
+	return nil
+}

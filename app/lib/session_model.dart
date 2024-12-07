@@ -5,6 +5,38 @@ import 'package:multicast_dns/multicast_dns.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+class IotLang {
+  final String key;
+  final String? subKey;
+  final int? index;
+  final String? modifier;
+
+  IotLang({
+    required this.key,
+    this.subKey,
+    this.index,
+    this.modifier,
+  });
+
+  factory IotLang.fromMatch(RegExpMatch match) {
+    return IotLang(
+      key: match.group(1)!,
+      subKey: match.group(2),
+      index: match.group(3) != null ? int.parse(match.group(3)!) : null,
+      modifier: match.group(4),
+    );
+  }
+}
+
+IotLang? parseExpression(String expr) {
+  final RegExp re = RegExp(r'^(\w+)(?:\.(\w+))?(?:\[(\d+)\])?(?::(.+))?$');
+  final match = re.firstMatch(expr);
+  if (match != null) {
+    return IotLang.fromMatch(match);
+  }
+  return null;
+}
+
 class Device {
   final String id;
   String name;
@@ -37,31 +69,49 @@ class Device {
   }
 }
 
-class AutomationRule {
-  final String id;
-  final String device;
-  final String condition;
-  final String action;
+class Rule {
+  final List<Task> tasks;
+  final bool isManual;
+  final DateTime? dateTime;
+  final String repeat;
+  final List<Condition> conditions;
+  bool isEnabled;
 
-  AutomationRule({
-    required this.id,
-    required this.device,
-    required this.condition,
-    required this.action,
+  Rule({
+    required this.tasks,
+    required this.isManual,
+    this.dateTime,
+    required this.repeat,
+    required this.conditions,
+    required this.isEnabled,
   });
+}
 
-  factory AutomationRule.fromJson(Map<String, dynamic> json) {
-    return AutomationRule(
-      id: json['id'],
-      device: json['device'],
-      condition: json['condition'],
-      action: json['action'],
-    );
-  }
+class Condition {
+  final String item;
+  final String comparator;
+  final String value;
+
+  Condition({
+    required this.item,
+    required this.comparator,
+    required this.value,
+  });
+}
+
+class Task {
+  final String id;
+  final List<String> commands;
+
+  Task({
+    required this.id,
+    required this.commands,
+  });
 }
 
 class SessionModel extends ChangeNotifier {
   List<Device> devices = [];
+  List<Rule> rules = [];
   String? gatewayIp;
   bool isLoading = false;
   int? gatewayPort;
@@ -69,11 +119,12 @@ class SessionModel extends ChangeNotifier {
 
   SessionModel(this.prefs) {
     loadConfig();
-    if (gatewayIp != null && gatewayPort != null) {
-      fetchDevices();
-    } else {
+    if (gatewayIp == null && gatewayPort == null) {
+      //   fetchDevices();
+      // } else {
       discoverGateway();
     }
+    notifyListeners();
   }
 
   void loadConfig() {
@@ -127,7 +178,7 @@ class SessionModel extends ChangeNotifier {
             gatewayIp = ip.address.address;
             gatewayPort = srv.port;
             notifyListeners();
-            fetchDevices(); // 找到网关后立即获取设备
+            await fetchDevices(); // 找到网关后立即获取设备
             gatewayFound = true;
           }
         }
@@ -165,15 +216,20 @@ class SessionModel extends ChangeNotifier {
           Uri.parse('http://$gatewayIp:$gatewayPort/api/control/$id/$action'));
       if (response.statusCode == 200) {
         print('Device $id action $action successful');
-        await Future.delayed(const Duration(milliseconds: 256));
-        final statusResponse = await http
-            .get(Uri.parse('http://$gatewayIp:$gatewayPort/api/status/$id'));
-        if (statusResponse.statusCode == 200) {
-          var data = json.decode(statusResponse.body);
+        /**
+         * TODO: update iot-lang to support: 
+         * modifier: expr which describe how to modify the status
+         *     with this, directly update the status of the device without 
+         *     the need to fetch the status
+         * tag: string which describe the command
+         */
+
+        final parsed = parseExpression(action);
+        if (parsed != null) {
+          final data = parsed.modifier != null
+              ? parsed.modifier!
+              : devices.firstWhere((device) => device.id == id).status;
           devices.firstWhere((device) => device.id == id).status = data;
-          print('Device $id status: ${data}');
-        } else {
-          throw Exception('Failed to fetch device status');
         }
       }
     } catch (e) {
@@ -220,18 +276,79 @@ class SessionModel extends ChangeNotifier {
     }
   }
 
-  void getAutomations() async {
+  Future<void> fetchRules() async {
     if (gatewayIp == null) return;
     try {
-      final response = await http
-          .get(Uri.parse('http://$gatewayIp:$gatewayPort/api/automations'));
+      final response =
+          await http.get(Uri.parse('http://$gatewayIp:$gatewayPort/api/rules'));
       if (response.statusCode == 200) {
-        print('Automations: ${response.body}');
+        List<dynamic> rulesJson = json.decode(response.body);
+        rules = rulesJson
+            .map((json) => Rule(
+                  tasks: (json['commands'] as List<dynamic>)
+                      .map((json) => Task(
+                            id: json['id'],
+                            commands: json['commands'],
+                          ))
+                      .toList(),
+                  isManual: json['isManual'],
+                  dateTime: json['dateTime'] != null
+                      ? DateTime.parse(json['dateTime'])
+                      : null,
+                  repeat: json['repeat'],
+                  conditions: (json['conditions'] as List<dynamic>)
+                      .map((json) => Condition(
+                            item: json['item'],
+                            comparator: json['comparator'],
+                            value: json['value'],
+                          ))
+                      .toList(),
+                  isEnabled: json['isEnabled'],
+                ))
+            .toList();
       } else {
         throw Exception('Failed to load automations');
       }
     } catch (e) {
       print('Error fetching automations: $e');
+    }
+  }
+
+  Future<void> updateRule(Rule rule) async {
+    if (gatewayIp == null) return;
+    try {
+      final response = await http.post(
+        Uri.parse('http://$gatewayIp:$gatewayPort/api/rules'),
+        headers: <String, String>{
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: json.encode({
+          'tasks': rule.tasks
+              .map((task) => {
+                    'id': task.id,
+                    'commands': task.commands,
+                  })
+              .toList(),
+          'isManual': rule.isManual,
+          'dateTime': rule.dateTime?.toIso8601String(),
+          'repeat': rule.repeat,
+          'conditions': rule.conditions
+              .map((condition) => {
+                    'item': condition.item,
+                    'comparator': condition.comparator,
+                    'value': condition.value,
+                  })
+              .toList(),
+          'isEnabled': rule.isEnabled,
+        }),
+      );
+      if (response.statusCode == 200) {
+        print('Rule updated successfully');
+      } else {
+        throw Exception('Failed to update rule');
+      }
+    } catch (e) {
+      print('Error updating rule: $e');
     }
   }
 }

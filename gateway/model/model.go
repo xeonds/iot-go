@@ -1,6 +1,11 @@
 package model
 
-import "github.com/gorilla/websocket"
+import (
+	"time"
+
+	"github.com/gorilla/websocket"
+	"gorm.io/gorm"
+)
 
 type Client struct {
 	ID     string `gorm:"primarykey" json:"id"`
@@ -11,9 +16,22 @@ type Client struct {
 }
 
 type Rule struct {
-	DeviceID  string `json:"device_id"`
-	Condition string `json:"condition"`
-	Action    string `json:"action"`
+	gorm.Model
+	Tasks      *[]Tasks     `gorm:"serializer:json" json:"tasks"`
+	IsManual   bool         `json:"is_manual"`
+	DateTime   *time.Time   `json:"date_time"`
+	Repeat     string       `json:"repeat"`
+	Conditions *[]Condition `gorm:"serializer:json" json:"conditions"`
+	IsEnabled  bool         `json:"is_enabled"`
+}
+type Condition struct {
+	Item       string `json:"item"`
+	Comparator string `json:"comparator"`
+	Value      string `json:"value"`
+}
+type Tasks struct {
+	Commands []string `gorm:"serializer:json" json:"commands"`
+	DeviceID string   `json:"device_id"`
 }
 
 type Data struct {
