@@ -119,7 +119,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                           ],
                         ),
                         const SizedBox(height: 16),
-                        Expanded(
+                        Flexible(
                           child: GridView.builder(
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
@@ -237,8 +237,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                               deviceCardOnClick(context, index, session);
                             },
                             child: Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                                padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
                                 child: Center(
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
@@ -359,15 +358,15 @@ class _DeviceListPageState extends State<DeviceListPage> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                controlPanelBuilder(context, device),
+                ...controlPanelBuilder(context, device),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
-                    ElevatedButton(
+                    FilledButton(
                         onPressed: () => showRenameDialog(context, device),
                         child: const Text('Rename Device')),
-                    ElevatedButton(
+                    FilledButton(
                       onPressed: () => showUnregisterDialog(context, device),
                       child: const Text('Unregister Device'),
                     ),
@@ -382,7 +381,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
     );
   }
 
-  Widget controlPanelBuilder(BuildContext context, Device device) {
+  List<Widget> controlPanelBuilder(BuildContext context, Device device) {
     List<Widget> controlPanel = [];
     final session = Provider.of<SessionModel>(context, listen: false);
     if (device.cmds != "") {
@@ -392,52 +391,44 @@ class _DeviceListPageState extends State<DeviceListPage> {
         if (cmd != "") {
           final cmdParts = cmd.split('->')[0].split(':');
           if (cmdParts[1] == 'reset') continue;
-
           if (cmdParts[0].split('.').length == 1) {
             buttonRow.add(
-              Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.all(4.0),
-                  child: ElevatedButton(
-                    onPressed: () {
-                      session.controlDevice(device.id, cmd.split('->')[0]);
-                    },
-                    child: Text(cmdParts[1]),
-                  ),
+              Padding(
+                padding: const EdgeInsets.all(4.0),
+                child: FilledButton(
+                  onPressed: () {
+                    session.controlDevice(device.id, cmd.split('->')[0]);
+                  },
+                  child: Text(cmdParts[1]),
                 ),
               ),
             );
           } else {
-            if (buttonRow.isNotEmpty) {
-              controlPanel.add(Wrap(
-                alignment: WrapAlignment.start,
-                children: buttonRow,
-              ));
-              controlPanel.add(const SizedBox(height: 8));
-              buttonRow = [];
-            }
             TextEditingController paramController = TextEditingController();
-            controlPanel.add(Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: paramController,
-                    decoration: InputDecoration(
-                      labelText: 'Enter value of ${cmdParts[0].split('.')[1]}:',
+            controlPanel.add(
+              Row(
+                children: [
+                  Flexible(
+                    child: TextField(
+                      controller: paramController,
+                      decoration: InputDecoration(
+                        labelText:
+                            'Enter value of ${cmdParts[0].split('.')[1]}:',
+                      ),
                     ),
                   ),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final paramValue = paramController.text;
-                    final fullAction = '${cmdParts[0]}:$paramValue';
-                    paramController.clear();
-                    session.controlDevice(device.id, fullAction);
-                  },
-                  child: const Text('Send'),
-                ),
-              ],
-            ));
+                  FilledButton(
+                    onPressed: () {
+                      final paramValue = paramController.text;
+                      final fullAction = '${cmdParts[0]}:$paramValue';
+                      paramController.clear();
+                      session.controlDevice(device.id, fullAction);
+                    },
+                    child: const Text('Send'),
+                  ),
+                ],
+              ),
+            );
             controlPanel.add(const SizedBox(height: 8));
           }
         }
@@ -456,17 +447,21 @@ class _DeviceListPageState extends State<DeviceListPage> {
     return _buildSection(children: controlPanel, title: 'Control Panel');
   }
 
-  Widget _buildSection(
+  List<Widget> _buildSection(
           {String title = '', required List<Widget> children}) =>
-      Card(
-          child: Column(
-              children: title != ''
-                  ? [
-                      const SizedBox(height: 10),
-                      _buildListSubtitle(title),
-                      ...children
-                    ]
-                  : [const SizedBox(height: 10), ...children]));
+      [
+        Card(
+            child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                    children: title != ''
+                        ? [
+                            const SizedBox(height: 10),
+                            _buildListSubtitle(title),
+                            ...children
+                          ]
+                        : [const SizedBox(height: 10), ...children])))
+      ];
 
   Widget _buildListSubtitle(String text) => Row(children: [
         Padding(
