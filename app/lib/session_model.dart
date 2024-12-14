@@ -184,14 +184,15 @@ class Task {
 class SessionModel extends ChangeNotifier {
   List<Device> devices = [];
   List<Rule> rules = [];
-  String? gatewayIp;
+  String? lanGatewayIp;
+  String? wanGatewayIp;
+  String? runMode;
   bool isLoading = false;
-  int? gatewayPort;
   SharedPreferences prefs;
 
   SessionModel(this.prefs) {
     loadConfig();
-    if (gatewayIp == null && gatewayPort == null) {
+    if (lanGatewayIp == null) {
       //   fetchDevices();
       // } else {
       discoverGateway();
@@ -200,8 +201,9 @@ class SessionModel extends ChangeNotifier {
   }
 
   void loadConfig() {
-    gatewayIp = prefs.getString('gatewayIp');
-    gatewayPort = prefs.getInt('gatewayPort');
+    lanGatewayIp = prefs.getString('lanGatewayIp');
+    wanGatewayIp = prefs.getString('wanGatewayIp');
+    runMode = prefs.getString('runMode');
     String? devicesJson = prefs.getString('devices');
     if (devicesJson != null) {
       List<dynamic> deviceList = json.decode(devicesJson);
@@ -216,11 +218,14 @@ class SessionModel extends ChangeNotifier {
   }
 
   void saveConfig() async {
-    if (gatewayIp != null) {
-      await prefs.setString('gatewayIp', gatewayIp!);
+    if (lanGatewayIp != null) {
+      await prefs.setString('lanGatewayIp', lanGatewayIp!);
     }
-    if (gatewayPort != null) {
-      await prefs.setInt('gatewayPort', gatewayPort!);
+    if (wanGatewayIp != null) {
+      await prefs.setString('wanGatewayIp', wanGatewayIp!);
+    }
+    if (runMode != null) {
+      await prefs.setString('runMode', runMode!);
     }
     String devicesJson =
         json.encode(devices.map((device) => device.toJson()).toList());
@@ -254,8 +259,7 @@ class SessionModel extends ChangeNotifier {
             in client.lookup<IPAddressResourceRecord>(
                 ResourceRecordQuery.addressIPv4(srv.target))) {
           if (!gatewayFound) {
-            gatewayIp = ip.address.address;
-            gatewayPort = srv.port;
+            lanGatewayIp = '${ip.address.address}:${srv.port}';
             notifyListeners();
             await fetchDevices(); // 找到网关后立即获取设备
             gatewayFound = true;
@@ -268,11 +272,11 @@ class SessionModel extends ChangeNotifier {
 
   // 获取设备列表
   Future<void> fetchDevices() async {
-    if (gatewayIp == null) return;
+    if (lanGatewayIp == null) return;
     isLoading = true;
     try {
-      final response = await http
-          .get(Uri.parse('http://$gatewayIp:$gatewayPort/api/devices'));
+      final response =
+          await http.get(Uri.parse('http://$lanGatewayIp/api/devices'));
       if (response.statusCode == 200) {
         List<dynamic> deviceJson = json.decode(response.body);
         devices = deviceJson.map((json) => Device.fromJson(json)).toList();
@@ -289,10 +293,10 @@ class SessionModel extends ChangeNotifier {
 
   // 控制设备状态
   Future<void> controlDevice(String id, String action) async {
-    if (gatewayIp == null) return;
+    if (lanGatewayIp == null) return;
     try {
-      final response = await http.post(
-          Uri.parse('http://$gatewayIp:$gatewayPort/api/control/$id/$action'));
+      final response = await http
+          .post(Uri.parse('http://$lanGatewayIp/api/control/$id/$action'));
       if (response.statusCode == 200) {
         print('Device $id action $action successful');
         /**
@@ -320,10 +324,10 @@ class SessionModel extends ChangeNotifier {
 
   // 注销设备
   Future<void> unregisterDevice(String id) async {
-    if (gatewayIp == null) return;
+    if (lanGatewayIp == null) return;
     try {
-      final response = await http
-          .post(Uri.parse('http://$gatewayIp:$gatewayPort/api/unregister/$id'));
+      final response =
+          await http.post(Uri.parse('http://$lanGatewayIp/api/unregister/$id'));
       if (response.statusCode == 200) {
         print('Device $id unregistered successfully');
         devices.removeWhere((device) => device.id == id);
@@ -338,10 +342,10 @@ class SessionModel extends ChangeNotifier {
   }
 
   void renameDevice(String id, String name) async {
-    if (gatewayIp == null) return;
+    if (lanGatewayIp == null) return;
     try {
-      final response = await http.post(
-          Uri.parse('http://$gatewayIp:$gatewayPort/api/rename/$id/$name'));
+      final response = await http
+          .post(Uri.parse('http://$lanGatewayIp/api/rename/$id/$name'));
       if (response.statusCode == 200) {
         print('Device $id renamed to $name');
         devices.firstWhere((device) => device.id == id).name = name;
@@ -356,10 +360,10 @@ class SessionModel extends ChangeNotifier {
   }
 
   Future<void> fetchRules() async {
-    if (gatewayIp == null) return;
+    if (lanGatewayIp == null) return;
     try {
       final response =
-          await http.get(Uri.parse('http://$gatewayIp:$gatewayPort/api/rules'));
+          await http.get(Uri.parse('http://$lanGatewayIp/api/rules'));
       if (response.statusCode == 200) {
         List<dynamic> rulesJson = json.decode(response.body);
         rules = rulesJson.map((json) => Rule.fromJson(json)).toList();
@@ -374,17 +378,17 @@ class SessionModel extends ChangeNotifier {
   }
 
   Future<void> createRule(Rule rule) async {
-    if (gatewayIp == null) return;
+    if (lanGatewayIp == null) return;
     try {
       final response = await http.post(
-        Uri.parse('http://$gatewayIp:$gatewayPort/api/rules'),
+        Uri.parse('http://$lanGatewayIp/api/rules'),
         body: json.encode(rule.toJson()),
         headers: {'Content-Type': 'application/json'},
       );
       if (response.statusCode == 200) {
         print('Rule created successfully');
       } else {
-        throw Exception('Failed to create rule');
+        throw Exception('Failed to create rule: ' + response.body);
       }
     } catch (e) {
       print('Error creating rule: $e');
@@ -394,10 +398,10 @@ class SessionModel extends ChangeNotifier {
   }
 
   Future<void> updateRule(Rule rule) async {
-    if (gatewayIp == null) return;
+    if (lanGatewayIp == null) return;
     try {
       final response = await http.post(
-        Uri.parse('http://$gatewayIp:$gatewayPort/api/rules/${rule.id}'),
+        Uri.parse('http://$lanGatewayIp/api/rules/${rule.id}'),
         body: json.encode(rule.toJson()),
         headers: {'Content-Type': 'application/json'},
       );
@@ -414,10 +418,10 @@ class SessionModel extends ChangeNotifier {
   }
 
   Future<void> runRule(String id) async {
-    if (gatewayIp == null) return;
+    if (lanGatewayIp == null) return;
     try {
       final response = await http.post(
-        Uri.parse('http://$gatewayIp:$gatewayPort/api/run/$id'),
+        Uri.parse('http://$lanGatewayIp/api/run/$id'),
       );
       if (response.statusCode == 200) {
         print('Rule $id run successfully');
@@ -432,10 +436,10 @@ class SessionModel extends ChangeNotifier {
   }
 
   Future<void> deleteRule(String id) async {
-    if (gatewayIp == null) return;
+    if (lanGatewayIp == null) return;
     try {
       final response = await http.delete(
-        Uri.parse('http://$gatewayIp:$gatewayPort/api/rules/$id'),
+        Uri.parse('http://$lanGatewayIp/api/rules/$id'),
       );
       if (response.statusCode == 200) {
         print('Rule $id deleted successfully');

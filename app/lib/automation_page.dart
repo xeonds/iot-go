@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:app/session_model.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_expandable_fab/flutter_expandable_fab.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 
 class AutomationPage extends StatefulWidget {
@@ -35,14 +40,42 @@ class _AutomationPageState extends State<AutomationPage> {
                     onTap: () {
                       session.runRule(data.id);
                       Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Rule ${data.name} is running.'),
+                        ),
+                      );
                     },
                   ),
                   ListTile(
                     leading: const Icon(Icons.delete),
                     title: const Text('Delete'),
                     onTap: () {
-                      session.deleteRule(data.id);
-                      Navigator.pop(context);
+                      showDialog(
+                        context: context,
+                        builder: (BuildContext context) {
+                          return AlertDialog(
+                            title: const Text('Delete Rule'),
+                            content: Text(
+                                'Are you sure you want to delete rule ${data.name}?'),
+                            actions: <Widget>[
+                              TextButton(
+                                child: const Text('Cancel'),
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                },
+                              ),
+                              TextButton(
+                                child: const Text('Delete'),
+                                onPressed: () async {
+                                  await session.deleteRule(data.id);
+                                  Navigator.pop(context);
+                                },
+                              ),
+                            ],
+                          );
+                        },
+                      );
                     },
                   ),
                 ],
@@ -146,7 +179,30 @@ class _AutomationPageState extends State<AutomationPage> {
               FloatingActionButton.small(
                 heroTag: null,
                 child: const Icon(Icons.file_upload),
-                onPressed: () {},
+                onPressed: () async {
+                  final result = await FilePicker.platform.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['json'],
+                  );
+                  if (result != null && result.files.single.path != null) {
+                    final file = File(result.files.single.path!);
+                    final content = await file.readAsString();
+                    print(content);
+                    final rule = Rule.fromJson(json.decode(content));
+                    await session.createRule(rule);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Rule ${rule.name} loaded.'),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('No file selected.'),
+                      ),
+                    );
+                  }
+                },
               ),
             ],
           ),
@@ -218,11 +274,28 @@ class _AutomationDetailPageState extends State<AutomationDetailPage> {
     });
   }
 
+  void _saveConfigToFile() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final file = File('${directory.path}/rule_${rule.name}.json');
+    await file.writeAsString(json.encode(rule));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Rule configuration saved to ${file.path}'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final session = Provider.of<SessionModel>(context, listen: true);
     return Scaffold(
       appBar: AppBar(
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.save_alt),
+            onPressed: _saveConfigToFile,
+          ),
+        ],
         title: const Text('Automation Detail'),
       ),
       body: ListView(

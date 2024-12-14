@@ -214,8 +214,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          Text('IP: ${session.gatewayIp ?? 'Not found'}'),
-                          Text('Port: ${session.gatewayPort ?? 'Not found'}'),
+                          Text('IP: ${session.lanGatewayIp ?? 'Not found'}'),
                         ],
                       ),
                     ),
@@ -353,7 +352,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
                     children: [
                       Text('Status: ${device.status}'),
                       Text('Device ID: ${device.id}'),
-                      Text('Gateway IP: ${session.gatewayIp}'),
+                      Text('Cmds: ${device.cmds.length}'),
                     ],
                   ),
                 ),
