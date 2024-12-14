@@ -14,6 +14,12 @@ The rules are written in IoTLang, a domain-specific language for IoT automation.
 
 In order to make it both friendly and powerful, the automation rule editor is designed to be a block-based editor. It is based on Blockly, a library developed by Google.
 
+## TODO
+
+- fix: json序列化不合规范导致的导出后的json导入失败问题，以及导入后传给服务器后解析失败的问题
+   - 以及增加对应的导入失败的错误提示
+- feat: 增加执行状态指示，展示当前任务的运行状态，并增加停止按钮和运行日志
+
 ## 注意事项
 
 构建安卓端的时候好像只能用openjdk17，我用openjdk21构建的时候会报错：
