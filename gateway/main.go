@@ -24,6 +24,7 @@ func main() {
 	})
 	gatewayConns, clientConns := make(map[string]*websocket.Conn), make(map[string]*websocket.Conn)
 	router := gin.Default()
+	router.Use(libgc.CorsMiddleware())
 	router.GET("/ws/device/:id", handler.DeviceWebSocketHandler(db, clientConns))
 	router.GET("/ws/gateway/:id", handler.GatewayWebSocketHandler(db, gatewayConns))
 	api := router.Group("/api")
@@ -154,6 +155,8 @@ func main() {
 			c.JSON(200, gin.H{"status": "ok"})
 		})
 	}
+
+	libgc.AddStatic(router, []string{"./web"})
 
 	if config.ParentGateway != "" {
 		go handler.RegisterToParentGateway(config.ParentGateway)

@@ -4,3 +4,4 @@ gateway/iot-go-gateway-linux-amd64
 client/x86/client
 */config.yaml
 */*/config.yaml
+build
