@@ -5,3 +5,5 @@ client/x86/client
 */config.yaml
 */*/config.yaml
 build
+client/esp8266/8266-controller/doc
+client/esp8266/8266-controller/8266-controller-backups
